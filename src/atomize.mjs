@@ -26,7 +26,7 @@ let Builders;
  * Internal only. Exported so that index.js can use it
  * @enum {number}
  */
-export const EncodeType = {
+const EncodeType = {
   Void: 1 << 1,
   Null: 2 << 1,
   True: 3 << 1,
@@ -38,6 +38,13 @@ export const EncodeType = {
   Map: 9 << 1,
   Set: 10 << 1,
   Custom: 11 << 1,
+};
+
+const SerialType = {
+  Int: 0,
+  Float64: 1 | (8 << 2),
+  Buffer: 2,
+  String: 3,
 };
 
 const RAW = {};
@@ -265,7 +272,10 @@ export function customEncoder(encoder, fallback) {
   return encoder
     ? (val, write) => {
         write(EncodeType.Custom, RAW);
-        return encoder(val, write);
+        write(PUSH_JUMP);
+        const shouldCache = encoder(val, write);
+        write(POP_JUMP);
+        return shouldCache;
       }
     : fallback;
 }
@@ -385,6 +395,7 @@ function rebuildValue(cache, custom, readNext, type) {
       return RAW;
     }
     case EncodeType.Custom: {
+      readNext(); // pop the jump
       const readValue = () => nextValue(cache, custom, readNext);
       return custom(readValue);
     }
@@ -416,4 +427,128 @@ function rebuildUntil(cache, results, custom, readNext, until) {
       results.push(result);
     }
   }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Binary Serialization
+/////////////////////////////////////////////////////////////////////////////
+
+export function serialize(atomized) {
+  let iolist = [];
+
+  let index = 0;
+  const length = atomized.length;
+
+  let encoder = null;
+
+  const serializeNext = () => {
+    const type = atomized[index++];
+    serializePosInt(type, iolist);
+
+    switch (type) {
+      case EncodeType.Array:
+      case EncodeType.Set: {
+        const until = atomized[index++];
+        serializePosInt(until, iolist);
+        while (index < until) {
+          serializeNext();
+        }
+        break;
+      }
+      case EncodeType.Object:
+      case EncodeType.Map: {
+        const until = atomized[index++];
+        serializePosInt(until, iolist);
+        let numKeys = 0;
+        while (index < until) {
+          numKeys++;
+          serializeNext();
+        }
+        for (let i = numKeys; i > 0; i--) {
+          serializeNext();
+        }
+        break;
+      }
+      case EncodeType.Raw: {
+        const next = atomized[index++];
+        if (typeof next === "number") {
+          if ((next === next) | 0) {
+            serializeInt(next, iolist);
+          } else {
+            serializeFloat64(next, iolist);
+          }
+        } else if (typeof next === "string") {
+          if (!encoder) {
+            encoder = new TextEncoder();
+          }
+          const bytes = encoder.encode(next);
+          serializePosInt((bytes.length << 2) | SerialType.String, iolist);
+          iolist.push(bytes);
+        }
+        // todo
+        break;
+      }
+      case EncodeType.Custom: {
+        const until = atomized[index++];
+        while (index < until) {
+          serializeNext();
+        }
+        break;
+      }
+      case EncodeType.Void:
+      case EncodeType.Null:
+      case EncodeType.True:
+      case EncodeType.False:
+      case EncodeType.NaN:
+      default:
+        // we have exhausted the list
+        break;
+    }
+  };
+
+  serializeNext();
+
+  const totalLength = iolist.reduce(
+    (l, val) => l + (typeof val === "number" ? 1 : val.byteLength),
+    0
+  );
+
+  const bytes = new Uint8Array(totalLength);
+  let outIndex = 0;
+  iolist.forEach((val) => {
+    if (typeof val === "number") {
+      bytes[outIndex++] = val;
+    } else {
+      bytes.set(val, outIndex);
+      outIndex += val.byteLength;
+    }
+  });
+
+  return bytes;
+}
+
+function serializeInt(int, iolist) {
+  const twiddled = int >= 0 ? int << 1 : (~int << 1) | 1;
+  if (twiddled >> 30) {
+    // the last two bits have data, so we encode as a float64 instead
+    serializeFloat64(int, iolist);
+  } else {
+    serializePosInt(twiddled << 2, iolist);
+  }
+}
+
+function serializeFloat64(num, iolist) {
+  const buffer = new ArrayBuffer(8);
+  const data = new DataView(buffer);
+  data.setFloat64(0, num);
+  iolist.push(buffer);
+}
+
+function serializePosInt(int, iolist) {
+  let remaining = int;
+  do {
+    const bits = remaining & 0x7f;
+    remaining >>>= 7;
+    iolist.push(remaining ? bits | 0x80 : bits);
+  } while (remaining);
 }
