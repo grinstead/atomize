@@ -39,6 +39,8 @@ const EncodeType = {
 
 const RAW = {};
 export const ALLOW_SELF_REFERENCE = {};
+const PUSH_JUMP = {};
+const POP_JUMP = {};
 
 /////////////////////////////////////////////////////////////////////////////
 // Atomizing
@@ -48,6 +50,7 @@ export function atomizer(/** Builders */ builders) {
   const atomize = (full) => {
     const output = [];
     const refs = new Map();
+    const jumps = [];
 
     let activeIndex = 0;
     let activeVal = RAW;
@@ -67,6 +70,10 @@ export function atomizer(/** Builders */ builders) {
           // prevents this codepath being activated twice
           activeVal = RAW;
         }
+      } else if (val === PUSH_JUMP) {
+        jumps.push(output.push(-1) - 1);
+      } else if (val === POP_JUMP) {
+        output[jumps.pop()] = output.length;
       } else {
         if (activeIndex >= 0) {
           // will be a negative number strictly below -1
@@ -173,13 +180,14 @@ export function encodeNumber(num, write) {
 export function encodeArray(array, write) {
   write(ALLOW_SELF_REFERENCE);
   write(EncodeType.Array, RAW);
+  write(PUSH_JUMP);
 
   const length = array.length;
-  write(length, RAW);
-
   for (let i = 0; i < length; i++) {
     write(array[i]);
   }
+
+  write(POP_JUMP);
 
   return true;
 }
@@ -193,9 +201,14 @@ export function encodeString(string, write) {
 export function encodeMap(map, write) {
   write(ALLOW_SELF_REFERENCE);
   write(EncodeType.Map, RAW);
-  write(map.size, RAW);
+
+  write(PUSH_JUMP);
   map.forEach((val, key) => {
     write(key);
+  });
+  write(POP_JUMP);
+
+  map.forEach((val) => {
     write(val);
   });
 
@@ -205,10 +218,11 @@ export function encodeMap(map, write) {
 export function encodeSet(set, write) {
   write(ALLOW_SELF_REFERENCE);
   write(EncodeType.Set, RAW);
-  write(set.size, RAW);
+  write(PUSH_JUMP);
   set.forEach((val) => {
     write(val);
   });
+  write(POP_JUMP);
 
   return true;
 }
@@ -220,11 +234,14 @@ export function encodeObject(object, write) {
   const keys = Object.keys(object);
   const length = keys.length;
 
-  write(length, RAW);
+  write(PUSH_JUMP);
   for (let i = 0; i < length; i++) {
-    const key = keys[i];
-    write(key);
-    write(object[key]);
+    write(keys[i]);
+  }
+  write(POP_JUMP);
+
+  for (let i = 0; i < length; i++) {
+    write(object[keys[i]]);
   }
 
   return true;

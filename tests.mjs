@@ -8,4 +8,4 @@ y.set(1, "hi");
 y.set("hi", 4);
 y.set(x, new Set([y, "boom"]));
 
-console.log(atomizer()({ x: y }));
+console.log(atomizer()({ a: y, b: 2 }));
