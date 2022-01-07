@@ -11,6 +11,7 @@ let Writer;
  *  boolean: function(boolean,Writer):?boolean,
  *  number: function(number,Writer):?boolean,
  *  array: function(Array<*>,Writer):?boolean,
+ *  string: function(string,Writer):?boolean,
  * }} Builders
  */
 let Builders;
@@ -91,6 +92,8 @@ export function atomizer(/** Builders */ builders) {
         func = builders.boolean;
       } else if (typeof val === "number") {
         func = builders.number;
+      } else if (typeof val === "string") {
+        func = builders.string;
       } else if (Array.isArray(val)) {
         func = builders.array;
       } else {
@@ -162,6 +165,12 @@ export function encodeArray(array, write) {
     write(array[i]);
   }
 
+  return true;
+}
+
+export function encodeString(string, write) {
+  write(EncodeType.String, RAW);
+  write(string, RAW);
   return true;
 }
 
