@@ -35,19 +35,25 @@ const ATOM_BITS = 3;
 const ATOM_BITS_MASK = (1 << ATOM_BITS) - 1;
 
 const SerialType = {
-  // these two are more like flags
+  // these are more like flags
   ComplexAtom: 1,
   BackReference: 2,
+  Int: 4,
+
+  // these have to be above the AtomTypes
+  String: (6 << 1) | 1,
 
   // these are straight values
-  Void: 1 << 2,
-  Null: 2 << 2,
-  True: 3 << 2,
-  False: 4 << 2,
-  NaN: 5 << 2,
+  Void: 1 << 4,
+  Null: 2 << 4,
+  True: 3 << 4,
+  False: 4 << 4,
+  NaN: 5 << 4,
+  Float64: 6 << 4,
 };
 
-const SERIAL_BITS = 1 + ATOM_BITS;
+const INT_BITS = 3;
+const SERIAL_BITS = 4;
 
 const RAW = {};
 export const AS_IS = {};
@@ -485,15 +491,44 @@ export function serialize(atomized) {
         pushByte(SerialType.Null);
       } else if (typeof val === "boolean") {
         pushByte(val ? SerialType.True : SerialType.False);
+      } else if (typeof val === "number") {
+        if (val === (val | 0)) {
+          // twiddle negatives
+          let remaining = val >= 0 ? val << 1 : (-val << 1) | 1;
+
+          let bits = (0x7f & (remaining << INT_BITS)) | SerialType.Int;
+          remaining >>>= 7 - INT_BITS;
+          if (!remaining) {
+            pushByte(bits);
+          } else {
+            const bytes = [bits | 0x80];
+            while (remaining) {
+              bits = remaining & 0x7f;
+              remaining >>>= 7;
+              bytes.push(remaining ? bits | 0x80 : bits);
+            }
+            byteLength += bytes.length;
+            iolist.push(new Uint8Array(bytes));
+          }
+        } else {
+          const bytes = new Uint8Array(8);
+          const view = new DataView(bytes.buffer);
+          view.setFloat64(0, val);
+
+          pushByte(SerialType.Float64);
+          byteLength += 8;
+          iolist.push(bytes);
+        }
       } else if (typeof val === "string") {
         if (!encoder) {
           encoder = new TextEncoder();
         }
+
+        const popJump = pushJump(SerialType.String);
         const bytes = encoder.encode(val);
-        const length = bytes.byteLength;
-        serializePosInt(bytes.byteLength, pushByte);
-        byteLength += length;
+        byteLength += bytes.byteLength;
         iolist.push(bytes);
+        popJump();
       } else {
         console.error(`TODO serialize ${String(val)}`);
       }
