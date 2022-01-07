@@ -5,6 +5,7 @@ import {
   encodeNumber,
   encodeVoid,
   ALLOW_SELF_REFERENCE,
+  encodeArray,
 } from "./atomize.mjs";
 
 function atomizer(builders = {}) {
@@ -13,6 +14,7 @@ function atomizer(builders = {}) {
     null: builders["null"] || encodeNull,
     boolean: builders["boolean"] || encodeBoolean,
     number: builders["number"] || encodeNumber,
+    array: builders["array"] || encodeArray,
   };
 
   return atomizer_(cleaned);
@@ -23,4 +25,5 @@ window["exports"]["encodeVoid"] = encodeVoid;
 window["exports"]["encodeNull"] = encodeNull;
 window["exports"]["encodeBoolean"] = encodeBoolean;
 window["exports"]["encodeNumber"] = encodeNumber;
+window["exports"]["encodeArray"] = encodeArray;
 window["exports"]["atomizer"] = atomizer;

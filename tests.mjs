@@ -1,3 +1,6 @@
 import { atomizer } from "./dist/atomize.min.mjs";
 
-console.log([-2], atomizer()(0.5));
+const x = [1];
+x.push(x);
+
+console.log(atomizer()([x, 0.5]));

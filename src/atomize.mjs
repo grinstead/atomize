@@ -6,10 +6,11 @@ let Writer;
 /**
  * The type for all the builders that are availabe to the atomizer
  * @typedef {{
- *  void: function(Writer):?boolean,
- *  null: function(Writer):?boolean,
+ *  void: function(void,Writer):?boolean,
+ *  null: function(null,Writer):?boolean,
  *  boolean: function(boolean,Writer):?boolean,
  *  number: function(number,Writer):?boolean,
+ *  array: function(Array<*>,Writer):?boolean,
  * }} Builders
  */
 let Builders;
@@ -25,6 +26,7 @@ const EncodeType = {
   NaN: 5 << 1,
   Int: 6 << 1,
   Float64: 7 << 1,
+  Array: 8 << 1,
 };
 
 const RAW = {};
@@ -89,6 +91,8 @@ export function atomizer(/** Builders */ builders) {
         func = builders.boolean;
       } else if (typeof val === "number") {
         func = builders.number;
+      } else if (Array.isArray(val)) {
+        func = builders.array;
       } else {
         throw new Error("TODO");
       }
@@ -145,6 +149,20 @@ export function encodeNumber(num, write) {
     write(num, RAW);
     return true;
   }
+}
+
+export function encodeArray(array, write) {
+  write(ALLOW_SELF_REFERENCE);
+  write(EncodeType.Array, RAW);
+
+  const length = array.length;
+  write(length, RAW);
+
+  for (let i = 0; i < length; i++) {
+    write(array[i]);
+  }
+
+  return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
