@@ -49,6 +49,8 @@ const AtomType = {
   Custom: 5,
 };
 
+const ATOM_BITS = 3;
+
 const SerialType = {
   Int: 0,
   Float64: 1 | (8 << 2),
@@ -84,6 +86,18 @@ export function atomizer(/** Builders */ builders) {
           output.push(AtomType.AsIs);
         }
         output.push(val);
+      } else if (secret === PUSH_JUMP) {
+        jumps.push(output.push(val) - 1);
+      } else if (secret === POP_JUMP) {
+        const i = jumps.pop();
+        const jump = output.length;
+        const combined = (jump << ATOM_BITS) | output[i];
+        // we use just >> instead of >>> because a negative
+        // value would mean a back-reference
+        if (combined >> ATOM_BITS !== jump) {
+          throw new Error(`value too large to encode ${String(val)}`);
+        }
+        output[i] = combined;
       } else if (val === ALLOW_SELF_REFERENCE) {
         if (activeVal !== RAW) {
           if (activeIndex >= 0) {
@@ -96,10 +110,6 @@ export function atomizer(/** Builders */ builders) {
           // prevents this codepath being activated twice
           activeVal = RAW;
         }
-      } else if (val === PUSH_JUMP) {
-        jumps.push(output.push(0) - 1);
-      } else if (val === POP_JUMP) {
-        output[jumps.pop()] = output.length;
       } else {
         if (activeIndex >= 0) {
           // will be a negative number strictly below -1
@@ -213,15 +223,14 @@ export function encodeNumber(num, write) {
 
 export function encodeArray(array, write) {
   write(ALLOW_SELF_REFERENCE);
-  write(AtomType.Array, RAW);
-  write(PUSH_JUMP);
+  write(AtomType.Array, PUSH_JUMP);
 
   const length = array.length;
   for (let i = 0; i < length; i++) {
     write(array[i]);
   }
 
-  write(POP_JUMP);
+  write(array, POP_JUMP);
 
   return true;
 }
@@ -233,14 +242,15 @@ export function encodeString(string, write) {
 
 export function encodeMap(map, write) {
   write(ALLOW_SELF_REFERENCE);
-  write(AtomType.Map, RAW);
+  write(AtomType.Map, PUSH_JUMP);
 
-  write(PUSH_JUMP);
+  // write the keys
   map.forEach((val, key) => {
     write(key);
   });
-  write(POP_JUMP);
+  write(map, POP_JUMP);
 
+  // write the values
   map.forEach((val) => {
     write(val);
   });
@@ -250,28 +260,26 @@ export function encodeMap(map, write) {
 
 export function encodeSet(set, write) {
   write(ALLOW_SELF_REFERENCE);
-  write(AtomType.Set, RAW);
-  write(PUSH_JUMP);
+  write(AtomType.Set, PUSH_JUMP);
   set.forEach((val) => {
     write(val);
   });
-  write(POP_JUMP);
+  write(set, POP_JUMP);
 
   return true;
 }
 
 export function encodeObject(object, write) {
   write(ALLOW_SELF_REFERENCE);
-  write(AtomType.Object, RAW);
+  write(AtomType.Object, PUSH_JUMP);
 
   const keys = Object.keys(object);
   const length = keys.length;
 
-  write(PUSH_JUMP);
   for (let i = 0; i < length; i++) {
     write(keys[i]);
   }
-  write(POP_JUMP);
+  write(object, POP_JUMP);
 
   for (let i = 0; i < length; i++) {
     write(object[keys[i]]);
@@ -283,10 +291,9 @@ export function encodeObject(object, write) {
 export function customEncoder(encoder, fallback) {
   return encoder
     ? (val, write) => {
-        write(AtomType.Custom, RAW);
-        write(PUSH_JUMP);
+        write(AtomType.Custom, PUSH_JUMP);
         const shouldCache = encoder(val, write);
-        write(POP_JUMP);
+        write(val, POP_JUMP);
         return shouldCache;
       }
     : fallback;
@@ -337,7 +344,7 @@ function rebuildValue(cache, custom, readNext, type) {
     return cache[~type];
   }
 
-  switch (type) {
+  switch (type & 7) {
     case AtomType.AsIs:
       return readNext();
     case AtomType.Array: {
@@ -346,7 +353,7 @@ function rebuildValue(cache, custom, readNext, type) {
       cache.push(array);
 
       // read the values into the array
-      rebuildUntil(cache, array, custom, readNext, readNext());
+      rebuildUntil(cache, array, custom, readNext, type >> ATOM_BITS);
 
       return RAW;
     }
@@ -357,7 +364,7 @@ function rebuildValue(cache, custom, readNext, type) {
 
       // read the keys
       const keys = [];
-      rebuildUntil(cache, keys, custom, readNext, readNext());
+      rebuildUntil(cache, keys, custom, readNext, type >> ATOM_BITS);
 
       // populate the object
       const length = keys.length;
@@ -374,7 +381,7 @@ function rebuildValue(cache, custom, readNext, type) {
 
       // read the keys
       const keys = [];
-      rebuildUntil(cache, keys, custom, readNext, readNext());
+      rebuildUntil(cache, keys, custom, readNext, type >> ATOM_BITS);
 
       // populate the map
       const length = keys.length;
@@ -391,7 +398,7 @@ function rebuildValue(cache, custom, readNext, type) {
 
       // read the values into the cache
       const values = [];
-      rebuildUntil(cache, values, custom, readNext, readNext());
+      rebuildUntil(cache, values, custom, readNext, type >> ATOM_BITS);
 
       // add them to the set
       const length = values.length;
@@ -402,7 +409,6 @@ function rebuildValue(cache, custom, readNext, type) {
       return RAW;
     }
     case AtomType.Custom: {
-      readNext(); // pop the jump
       const readValue = () => nextValue(cache, custom, readNext);
       return custom(readValue);
     }
