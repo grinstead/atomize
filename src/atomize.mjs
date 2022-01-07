@@ -17,14 +17,16 @@ let Writer;
  *  object: function(!Object,Writer):?boolean,
  *  function: function(function(...*),Writer):?boolean,
  *  symbol: function(Symbol,Writer):?boolean,
+ *  instance: function(!Object,Writer):?boolean,
  * }} Builders
  */
 let Builders;
 
 /**
+ * Internal only. Exported so that index.js can use it
  * @enum {number}
  */
-const EncodeType = {
+export const EncodeType = {
   Void: 1 << 1,
   Null: 2 << 1,
   True: 3 << 1,
@@ -37,10 +39,12 @@ const EncodeType = {
   Map: 10 << 1,
   Set: 11 << 1,
   Object: 12 << 1,
+  Custom: 13 << 1,
+  Raw: 14 << 1,
 };
 
 const RAW = {};
-export const AS_IS = {}; // same function as RAW, but RAW should not be publicly exposed
+export const AS_IS = {};
 export const ALLOW_SELF_REFERENCE = {};
 const PUSH_JUMP = {};
 const POP_JUMP = {};
@@ -59,8 +63,10 @@ export function atomizer(/** Builders */ builders) {
     let activeVal = RAW;
 
     const write = (val, secret) => {
-      if (secret === RAW || secret === AS_IS) {
+      if (secret === RAW) {
         output.push(val);
+      } else if (secret === AS_IS) {
+        output.push(EncodeType.Raw, val);
       } else if (val === ALLOW_SELF_REFERENCE) {
         if (activeVal !== RAW) {
           if (activeIndex >= 0) {
@@ -126,14 +132,15 @@ export function atomizer(/** Builders */ builders) {
         if (!proto || proto === Object.prototype) {
           func = builders.object;
         } else {
-          throw new Error("TODO");
+          func = builders.instance;
         }
       }
 
       const prevVal = activeVal;
       const prevIndex = activeIndex;
+      const prevLength = output.length;
       activeVal = val;
-      activeIndex = output.length;
+      activeIndex = prevLength;
 
       // write the value and save the reference to it
       // if the function returns true
@@ -141,6 +148,10 @@ export function atomizer(/** Builders */ builders) {
         refs.set(val, activeIndex >= 0 ? (activeIndex << 1) | 1 : -activeIndex);
       } else if (activeIndex < 0) {
         refs.delete(val);
+      }
+
+      if (prevLength === output.length) {
+        throw new Error(`Value encoded into nothing ${String(val)}`);
       }
 
       activeVal = prevVal;
@@ -252,6 +263,15 @@ export function encodeObject(object, write) {
   }
 
   return true;
+}
+
+export function customEncoder(encoder, fallback) {
+  return encoder
+    ? (val, write) => {
+        write(EncodeType.Custom, RAW);
+        return encoder(val, write);
+      }
+    : fallback;
 }
 
 /////////////////////////////////////////////////////////////////////////////

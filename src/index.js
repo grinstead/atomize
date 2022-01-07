@@ -11,6 +11,7 @@ import {
   encodeSet,
   encodeObject,
   AS_IS,
+  customEncoder,
 } from "./atomize.mjs";
 
 function unsupported(val, write) {
@@ -19,22 +20,24 @@ function unsupported(val, write) {
 
 function encodeAsIs(val, write) {
   write(val, AS_IS);
+  return true;
 }
 
 function atomizer(builders = {}) {
   const unknown = builders["keepUnknownsAsIs"] ? encodeAsIs : unsupported;
   const cleaned = {
-    void: builders["void"] || encodeVoid,
-    null: builders["null"] || encodeNull,
-    boolean: builders["boolean"] || encodeBoolean,
-    number: builders["number"] || encodeNumber,
-    Array: builders["Array"] || encodeArray,
-    string: builders["string"] || encodeString,
-    Map: builders["Map"] || encodeMap,
-    Set: builders["Set"] || encodeSet,
-    object: builders["object"] || encodeObject,
-    function: builders["function"] || unknown,
-    symbol: builders["symbol"] || unknown,
+    void: customEncoder(builders["void"], encodeVoid),
+    null: customEncoder(builders["null"], encodeNull),
+    boolean: customEncoder(builders["boolean"], encodeBoolean),
+    number: customEncoder(builders["number"], encodeNumber),
+    Array: customEncoder(builders["Array"], encodeArray),
+    string: customEncoder(builders["string"], encodeString),
+    Map: customEncoder(builders["Map"], encodeMap),
+    Set: customEncoder(builders["Set"], encodeSet),
+    object: customEncoder(builders["object"], encodeObject),
+    function: customEncoder(builders["function"], unknown),
+    symbol: customEncoder(builders["symbol"], unknown),
+    instance: customEncoder(builders["instance"], unknown),
   };
 
   return atomizer_(cleaned);
