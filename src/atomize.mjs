@@ -453,8 +453,9 @@ export function serialize(atomized) {
 
   const pushJump = (type) => {
     const index = iolist.push(0) - 1;
+    const start = byteLength;
     return () => {
-      let remaining = byteLength;
+      let remaining = byteLength - start;
       let bits = (0x7f & (remaining << SERIAL_BITS)) | type;
       remaining >>>= 7 - SERIAL_BITS;
       if (!remaining) {
@@ -570,7 +571,6 @@ export function serialize(atomized) {
       default:
         // we have exhausted the list
         throw new Error(`impossible ${type}`);
-        break;
     }
   };
 
@@ -611,21 +611,28 @@ export function deserializer(custom) {
 
     let nextIndex = 0;
     let length = full.length;
+    let trickInt = null;
 
     // todo: loads of validation
-    const readVarInt = (leadin, trashBits) => {
-      let byte = leadin >> trashBits;
-      let shift = 7 - trashBits;
-      let int = 0x7f & byte;
+    const readVarInt = (firstByte, trashBits) => {
+      let byte = firstByte;
+      let bitlength = 7 - trashBits;
+      let int = (0x7f & byte) >> trashBits;
       while (byte & 0x80) {
         byte = full[nextIndex++];
-        int |= (byte & 0x7f) << shift;
-        shift += 7;
+        int |= (byte & 0x7f) << bitlength;
+        bitlength += 7;
       }
       return int;
     };
 
-    const readNext = (until) => {
+    const readNext_ = (until) => {
+      if (trickInt != null) {
+        const val = trickInt;
+        trickInt = null;
+        return val;
+      }
+
       if (nextIndex === until) {
         return POP_JUMP;
       }
@@ -639,7 +646,8 @@ export function deserializer(custom) {
         // the other serialized types were kind of jammed in
         switch (byte & ((1 << SERIAL_BITS) - 1)) {
           case SerialType.String: {
-            const endIndex = readVarInt(byte, SERIAL_BITS);
+            const length = readVarInt(byte, SERIAL_BITS);
+            const endIndex = nextIndex + length;
             const str = full.subarray(nextIndex, endIndex);
             nextIndex = endIndex;
 
@@ -651,13 +659,18 @@ export function deserializer(custom) {
           }
           default:
             // this is a complex atom type
-            return readVarInt(byte, ATOM_BITS);
+
+            // blowing it up for now
+            const length = readVarInt(byte, SERIAL_BITS);
+            const until = nextIndex + length;
+            return (until << ATOM_BITS) | (ATOM_BITS_MASK & (byte >> 1));
         }
       } else if (byte & SerialType.BackReference) {
         return ~readVarInt(byte, 2);
       } else if (byte & SerialType.Int) {
         const twiddled = readVarInt(byte, INT_BITS);
-        return twiddled & 1 ? -(twiddled >>> 1) : twiddled >>> 1;
+        trickInt = twiddled & 1 ? -(twiddled >>> 1) : twiddled >>> 1;
+        return AtomType.AsIs;
       } else {
         switch (byte) {
           case SerialType.Void:
@@ -686,6 +699,16 @@ export function deserializer(custom) {
             throw new Error("bad byte " + byte);
         }
       }
+    };
+
+    const readNext = (until) => {
+      const before = nextIndex;
+      const result = readNext_(until);
+      // console.log("read", before, nextIndex, until, result);
+      if (nextIndex < before) {
+        throw "fail";
+      }
+      return result;
     };
 
     const cache = [];
