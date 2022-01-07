@@ -16,6 +16,7 @@ let Writer;
  *  Set: function(Set<*>,Writer):?boolean,
  *  object: function(!Object,Writer):?boolean,
  *  function: function(function(...*),Writer):?boolean,
+ *  symbol: function(Symbol,Writer):?boolean,
  * }} Builders
  */
 let Builders;
@@ -112,6 +113,8 @@ export function atomizer(/** Builders */ builders) {
         func = builders.string;
       } else if (typeof val === "function") {
         func = builders.function;
+      } else if (typeof val === "symbol") {
+        func = builders.symbol;
       } else if (val instanceof Map) {
         func = builders.Map;
       } else if (val instanceof Set) {

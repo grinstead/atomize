@@ -14,7 +14,7 @@ import {
 } from "./atomize.mjs";
 
 function unsupported(val, write) {
-  throw new Error(`No way to atomize ${val}`);
+  throw new Error(`No way to atomize ${String(val)}`);
 }
 
 function encodeAsIs(val, write) {
@@ -34,6 +34,7 @@ function atomizer(builders = {}) {
     Set: builders["Set"] || encodeSet,
     object: builders["object"] || encodeObject,
     function: builders["function"] || unknown,
+    symbol: builders["symbol"] || unknown,
   };
 
   return atomizer_(cleaned);
