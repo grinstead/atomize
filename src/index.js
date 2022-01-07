@@ -13,6 +13,7 @@ import {
   customEncoder,
   rebuilder,
   serialize,
+  deserializer,
 } from "./atomize.mjs";
 
 function unsupported(val, write) {
@@ -48,3 +49,4 @@ window["exports"]["AS_IS"] = AS_IS;
 window["exports"]["atomizer"] = atomizer;
 window["exports"]["rebuilder"] = rebuilder;
 window["exports"]["serialize"] = serialize;
+window["exports"]["deserializer"] = deserializer;

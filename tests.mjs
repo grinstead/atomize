@@ -1,11 +1,16 @@
 import { atomizer, rebuilder, serialize } from "./dist/atomize.min.mjs";
+import { deserializer } from "./src/atomize.mjs";
 
 const run = (x, encode, decode) => {
   console.log("\n// test");
   const atomized = atomizer(encode)(x);
   console.log(atomized);
+
+  const serialized = serialize(atomized);
   console.log(serialize(atomized));
-  console.log(rebuilder(decode)(atomized));
+
+  console.log(deserializer(decode)(serialized));
+  // console.log(rebuilder(decode)(atomized));
 };
 
 const x = [1];

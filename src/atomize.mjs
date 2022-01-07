@@ -590,23 +590,6 @@ export function serialize(atomized) {
   return bytes;
 }
 
-// function serializeInt(int, iolist) {
-//   const twiddled = int >= 0 ? int << 1 : (~int << 1) | 1;
-//   if (twiddled >> 30) {
-//     // the last two bits have data, so we encode as a float64 instead
-//     serializeFloat64(int, iolist);
-//   } else {
-//     serializePosInt(twiddled << 2, iolist);
-//   }
-// }
-
-// function serializeFloat64(num, iolist) {
-//   const buffer = new ArrayBuffer(8);
-//   const data = new DataView(buffer);
-//   data.setFloat64(0, num);
-//   iolist.push(buffer);
-// }
-
 function serializePosInt(int, pushByte) {
   let remaining = int;
   do {
@@ -614,4 +597,106 @@ function serializePosInt(int, pushByte) {
     remaining >>>= 7;
     pushByte(remaining ? bits | 0x80 : bits);
   } while (remaining);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Binary Deserialization
+/////////////////////////////////////////////////////////////////////////////
+
+export function deserializer(custom) {
+  let decoder = null;
+
+  function deserialize(full) {
+    let view = null;
+
+    let nextIndex = 0;
+    let length = full.length;
+
+    // todo: loads of validation
+    const readVarInt = (leadin, trashBits) => {
+      let byte = leadin >> trashBits;
+      let shift = 7 - trashBits;
+      let int = 0x7f & byte;
+      while (byte & 0x80) {
+        byte = full[nextIndex++];
+        int |= (byte & 0x7f) << shift;
+        shift += 7;
+      }
+      return int;
+    };
+
+    const readNext = (until) => {
+      if (nextIndex === until) {
+        return POP_JUMP;
+      }
+
+      if (nextIndex === length) {
+        throw new Error("Incomplete data");
+      }
+
+      const byte = full[nextIndex++];
+      if (byte & SerialType.ComplexAtom) {
+        // the other serialized types were kind of jammed in
+        switch (byte & ((1 << SERIAL_BITS) - 1)) {
+          case SerialType.String: {
+            const endIndex = readVarInt(byte, SERIAL_BITS);
+            const str = full.subarray(nextIndex, endIndex);
+            nextIndex = endIndex;
+
+            if (!decoder) {
+              decoder = new TextDecoder();
+            }
+
+            return decoder.decode(str);
+          }
+          default:
+            // this is a complex atom type
+            return readVarInt(byte, ATOM_BITS);
+        }
+      } else if (byte & SerialType.BackReference) {
+        return ~readVarInt(byte, 2);
+      } else if (byte & SerialType.Int) {
+        const twiddled = readVarInt(byte, INT_BITS);
+        return twiddled & 1 ? -(twiddled >>> 1) : twiddled >>> 1;
+      } else {
+        switch (byte) {
+          case SerialType.Void:
+            return;
+          case SerialType.Null:
+            return null;
+          case SerialType.True:
+            return true;
+          case SerialType.False:
+            return false;
+          case SerialType.NaN:
+            return NaN;
+          case SerialType.Float64: {
+            if (!view) {
+              view = new DataView(
+                full.buffer,
+                full.byteOffset,
+                full.byteLength
+              );
+            }
+            const float = view.getFloat64(nextIndex);
+            nextIndex += 8;
+            return float;
+          }
+          default:
+            throw new Error("bad byte " + byte);
+        }
+      }
+    };
+
+    const cache = [];
+    const result = nextValue(cache, custom, readNext);
+
+    if (nextIndex !== length) {
+      // throw new Error("deserializer given excess content");
+    }
+
+    return result;
+  }
+
+  return deserialize;
 }
