@@ -41,12 +41,12 @@ const EncodeType = {
 };
 
 const AtomType = {
-  AsIs: 0 << 1,
-  Array: 1 << 1,
-  Object: 2 << 1,
-  Map: 3 << 1,
-  Set: 4 << 1,
-  Custom: 5 << 1,
+  AsIs: 0,
+  Array: 1,
+  Object: 2,
+  Map: 3,
+  Set: 4,
+  Custom: 5,
 };
 
 const SerialType = {
@@ -87,11 +87,11 @@ export function atomizer(/** Builders */ builders) {
       } else if (val === ALLOW_SELF_REFERENCE) {
         if (activeVal !== RAW) {
           if (activeIndex >= 0) {
-            activeIndex = ~(activeIndex << 1);
+            activeIndex = ~activeIndex;
           }
 
           // allows references (for now)
-          refs.set(activeVal, -activeIndex);
+          refs.set(activeVal, activeIndex);
 
           // prevents this codepath being activated twice
           activeVal = RAW;
@@ -103,20 +103,21 @@ export function atomizer(/** Builders */ builders) {
       } else {
         if (activeIndex >= 0) {
           // will be a negative number strictly below -1
-          activeIndex = ~(activeIndex << 1);
+          activeIndex = ~activeIndex;
 
           // prevent self-references
-          refs.set(activeVal, -1);
+          refs.set(activeVal, 0);
         }
+
+        atomIndex++;
 
         const known = refs.get(val);
         if (known != null) {
-          if (known === -1) {
+          if (known === 0) {
             throw new Error(`infinite loop when encoding ${val}`);
           }
 
-          atomIndex++;
-          output.push(known >= 0 ? known : -known);
+          output.push(known);
         } else {
           atomizeValue(val);
         }
@@ -158,12 +159,14 @@ export function atomizer(/** Builders */ builders) {
       const prevIndex = activeIndex;
       const prevLength = output.length;
       activeVal = val;
-      activeIndex = atomIndex++;
+      activeIndex = atomIndex;
 
       // write the value and save the reference to it
       // if the function returns true
       if (func(val, write)) {
-        refs.set(val, activeIndex >= 0 ? (activeIndex << 1) | 1 : -activeIndex);
+        if (activeIndex >= 0) {
+          refs.set(val, ~activeIndex);
+        }
       } else if (activeIndex < 0) {
         refs.delete(val);
       }
@@ -329,9 +332,9 @@ function rebuildValue(cache, custom, readNext, type) {
     return type;
   }
 
-  if (type & 1) {
+  if (type < 0) {
     // it is a back-reference
-    return cache[type >> 1];
+    return cache[~type];
   }
 
   switch (type) {
