@@ -65,15 +65,16 @@ const POP_JUMP = {};
 // Atomizing
 /////////////////////////////////////////////////////////////////////////////
 
-export function atomizer(/** Builders */ builders) {
+export function atomizer(dictionary, /** Builders */ builders) {
   const atomize = (full) => {
     const output = [];
-    const refs = new Map();
+    const refs = new Map(dictionary);
     const jumps = [];
 
-    let atomIndex = 0;
+    let atomIndex = refs.size - 1;
     let activeIndex = 0;
     let activeVal = RAW;
+    console.log("start", refs);
 
     const write = (val, secret) => {
       if (secret === RAW) {
@@ -186,7 +187,7 @@ export function atomizer(/** Builders */ builders) {
       activeIndex = prevIndex;
     };
 
-    atomizeValue(full);
+    write(full, null);
 
     return output;
   };
@@ -715,7 +716,7 @@ export function deserializer(custom) {
     const result = nextValue(cache, custom, readNext);
 
     if (nextIndex !== length) {
-      // throw new Error("deserializer given excess content");
+      throw new Error("deserializer given excess content");
     }
 
     return result;

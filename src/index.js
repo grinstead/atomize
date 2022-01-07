@@ -42,7 +42,12 @@ function atomizer(builders = {}) {
     instance: customEncoder(builders["instance"], unknown),
   };
 
-  return atomizer_(cleaned);
+  const dictionary = [];
+  builders["dictionary"]?.forEach((val, index) => {
+    dictionary.push([val, index]);
+  });
+
+  return atomizer_(dictionary, cleaned);
 }
 
 window["exports"]["AS_IS"] = AS_IS;
