@@ -9,3 +9,4 @@ y.set("hi", 4);
 y.set(x, new Set([y, "boom"]));
 
 console.log(atomizer()({ a: y, b: 2 }));
+console.log(atomizer({ keepUnknownsAsIs: true })(() => "hi"));

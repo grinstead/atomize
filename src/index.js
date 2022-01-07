@@ -10,9 +10,19 @@ import {
   encodeMap,
   encodeSet,
   encodeObject,
+  AS_IS,
 } from "./atomize.mjs";
 
+function unsupported(val, write) {
+  throw new Error(`No way to atomize ${val}`);
+}
+
+function encodeAsIs(val, write) {
+  write(val, AS_IS);
+}
+
 function atomizer(builders = {}) {
+  const unknown = builders["keepUnknownsAsIs"] ? encodeAsIs : unsupported;
   const cleaned = {
     void: builders["void"] || encodeVoid,
     null: builders["null"] || encodeNull,
@@ -23,6 +33,7 @@ function atomizer(builders = {}) {
     Map: builders["Map"] || encodeMap,
     Set: builders["Set"] || encodeSet,
     object: builders["object"] || encodeObject,
+    function: builders["function"] || unknown,
   };
 
   return atomizer_(cleaned);
@@ -38,4 +49,5 @@ window["exports"]["encodeString"] = encodeString;
 window["exports"]["encodeMap"] = encodeMap;
 window["exports"]["encodeSet"] = encodeSet;
 window["exports"]["encodeObject"] = encodeObject;
+window["exports"]["AS_IS"] = AS_IS;
 window["exports"]["atomizer"] = atomizer;

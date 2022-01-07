@@ -15,6 +15,7 @@ let Writer;
  *  Map: function(Map<*,*>,Writer):?boolean,
  *  Set: function(Set<*>,Writer):?boolean,
  *  object: function(!Object,Writer):?boolean,
+ *  function: function(function(...*),Writer):?boolean,
  * }} Builders
  */
 let Builders;
@@ -38,6 +39,7 @@ const EncodeType = {
 };
 
 const RAW = {};
+export const AS_IS = {}; // same function as RAW, but RAW should not be publicly exposed
 export const ALLOW_SELF_REFERENCE = {};
 const PUSH_JUMP = {};
 const POP_JUMP = {};
@@ -56,7 +58,7 @@ export function atomizer(/** Builders */ builders) {
     let activeVal = RAW;
 
     const write = (val, secret) => {
-      if (secret === RAW) {
+      if (secret === RAW || secret === AS_IS) {
         output.push(val);
       } else if (val === ALLOW_SELF_REFERENCE) {
         if (activeVal !== RAW) {
@@ -108,6 +110,8 @@ export function atomizer(/** Builders */ builders) {
         func = builders.number;
       } else if (typeof val === "string") {
         func = builders.string;
+      } else if (typeof val === "function") {
+        func = builders.function;
       } else if (val instanceof Map) {
         func = builders.Map;
       } else if (val instanceof Set) {
