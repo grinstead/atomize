@@ -32,15 +32,12 @@ export const EncodeType = {
   True: 3 << 1,
   False: 4 << 1,
   NaN: 5 << 1,
-  Int: 6 << 1,
-  Float64: 7 << 1,
-  Array: 8 << 1,
-  String: 9 << 1,
-  Map: 10 << 1,
-  Set: 11 << 1,
-  Object: 12 << 1,
-  Custom: 13 << 1,
-  Raw: 14 << 1,
+  Raw: 6 << 1,
+  Array: 7 << 1,
+  Object: 8 << 1,
+  Map: 9 << 1,
+  Set: 10 << 1,
+  Custom: 11 << 1,
 };
 
 const RAW = {};
@@ -187,12 +184,10 @@ export function encodeNumber(num, write) {
     write(EncodeType.NaN, RAW);
     return false;
   } else if (num === (num | 0)) {
-    write(EncodeType.Int, RAW);
-    write(num, RAW);
+    write(num, AS_IS);
     return true;
   } else {
-    write(EncodeType.Float64, RAW);
-    write(num, RAW);
+    write(num, AS_IS);
     return true;
   }
 }
@@ -213,8 +208,7 @@ export function encodeArray(array, write) {
 }
 
 export function encodeString(string, write) {
-  write(EncodeType.String, RAW);
-  write(string, RAW);
+  write(string, AS_IS);
   return true;
 }
 
@@ -333,9 +327,7 @@ function rebuildValue(cache, custom, readNext, outerUntil) {
       return false;
     case EncodeType.NaN:
       return NaN;
-    case EncodeType.Int:
-      return readNext();
-    case EncodeType.Float64:
+    case EncodeType.Raw:
       return readNext();
     case EncodeType.Array: {
       // write the value to the cache immediately for self-referencing
@@ -352,8 +344,21 @@ function rebuildValue(cache, custom, readNext, outerUntil) {
 
       return RAW;
     }
-    case EncodeType.String:
-      return readNext();
+    case EncodeType.Object: {
+      // write the value to the cache immediately for self-referencing
+      const object = {};
+      const start = cache.push(object);
+
+      // read the keys
+      const end = rebuildUntil(cache, custom, readNext, readNext());
+
+      // populate the object
+      for (let i = start; i < end; i++) {
+        object[cache[i]] = nextValue(cache, custom, readNext);
+      }
+
+      return RAW;
+    }
     case EncodeType.Map: {
       // write the value to the cache immediately for self-referencing
       const map = new Map();
@@ -380,21 +385,6 @@ function rebuildValue(cache, custom, readNext, outerUntil) {
       // add them to the set
       for (let i = start; i < end; i++) {
         set.add(cache[i]);
-      }
-
-      return RAW;
-    }
-    case EncodeType.Object: {
-      // write the value to the cache immediately for self-referencing
-      const object = {};
-      const start = cache.push(object);
-
-      // read the keys
-      const end = rebuildUntil(cache, custom, readNext, readNext());
-
-      // populate the object
-      for (let i = start; i < end; i++) {
-        object[cache[i]] = nextValue(cache, custom, readNext);
       }
 
       return RAW;
