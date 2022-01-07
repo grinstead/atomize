@@ -20,7 +20,19 @@ y.set(x, new Set([y, "boom"]));
 const a = [];
 a.push(a);
 
-run(["hi", a]);
+run([["a", "a2"], "b"]);
+
+run(
+  ["hi", a],
+  {
+    string(str, write) {
+      write(str === "hi" ? true : false);
+    },
+  },
+  (next) => {
+    return next() ? "hi" : "baloney";
+  }
+);
 
 const oof = { test: 1 };
 oof.test = oof;

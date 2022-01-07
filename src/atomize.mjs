@@ -87,13 +87,13 @@ export function atomizer(/** Builders */ builders) {
           activeIndex = ~(activeIndex << 1);
 
           // prevent self-references
-          refs.set(val, -1);
+          refs.set(activeVal, -1);
         }
 
         const known = refs.get(val);
         if (known != null) {
           if (known === -1) {
-            throw new Error(`Infinite loop when encoding ${val}`);
+            throw new Error(`infinite loop when encoding ${val}`);
           }
 
           atomIndex++;
@@ -332,29 +332,26 @@ function rebuildValue(cache, custom, readNext, outerUntil) {
     case EncodeType.Array: {
       // write the value to the cache immediately for self-referencing
       const array = [];
-      const start = cache.push(array);
+      cache.push(array);
 
-      // read the values into the cache
-      const end = rebuildUntil(cache, custom, readNext, readNext());
-
-      // push them onto the array
-      for (let i = start; i < end; i++) {
-        array.push(cache[i]);
-      }
+      // read the values into the array
+      rebuildUntil(cache, array, custom, readNext, readNext());
 
       return RAW;
     }
     case EncodeType.Object: {
       // write the value to the cache immediately for self-referencing
       const object = {};
-      const start = cache.push(object);
+      cache.push(object);
 
       // read the keys
-      const end = rebuildUntil(cache, custom, readNext, readNext());
+      const keys = [];
+      rebuildUntil(cache, keys, custom, readNext, readNext());
 
       // populate the object
-      for (let i = start; i < end; i++) {
-        object[cache[i]] = nextValue(cache, custom, readNext);
+      const length = keys.length;
+      for (let i = 0; i < length; i++) {
+        object[keys[i]] = nextValue(cache, custom, readNext);
       }
 
       return RAW;
@@ -362,14 +359,16 @@ function rebuildValue(cache, custom, readNext, outerUntil) {
     case EncodeType.Map: {
       // write the value to the cache immediately for self-referencing
       const map = new Map();
-      const start = cache.push(map);
+      cache.push(map);
 
       // read the keys
-      const end = rebuildUntil(cache, custom, readNext, readNext());
+      const keys = [];
+      rebuildUntil(cache, keys, custom, readNext, readNext());
 
       // populate the map
-      for (let i = start; i < end; i++) {
-        map.set(cache[i], nextValue(cache, custom, readNext));
+      const length = keys.length;
+      for (let i = 0; i < length; i++) {
+        map.set(keys[i], nextValue(cache, custom, readNext));
       }
 
       return RAW;
@@ -377,14 +376,16 @@ function rebuildValue(cache, custom, readNext, outerUntil) {
     case EncodeType.Set: {
       // write the value to the cache immediately for self-referencing
       const set = new Set();
-      const start = cache.push(set);
+      cache.push(set);
 
       // read the values into the cache
-      const end = rebuildUntil(cache, custom, readNext, readNext());
+      const values = [];
+      rebuildUntil(cache, values, custom, readNext, readNext());
 
       // add them to the set
-      for (let i = start; i < end; i++) {
-        set.add(cache[i]);
+      const length = values.length;
+      for (let i = 0; i < length; i++) {
+        set.add(values[i]);
       }
 
       return RAW;
@@ -409,19 +410,17 @@ function nextValue(cache, custom, readNext) {
   }
 }
 
-function rebuildUntil(cache, custom, readNext, until) {
-  let endIndex = cache.length;
+function rebuildUntil(cache, results, custom, readNext, until) {
   let result = RAW;
-
   while (result !== POP_JUMP) {
+    const index = cache.length;
     result = rebuildValue(cache, custom, readNext, until);
     if (result === RAW) {
       // include the value we just wrote
-      endIndex++;
+      results.push(cache[index]);
     } else if (result !== POP_JUMP) {
-      endIndex = cache.push(result);
+      cache.push(result);
+      results.push(result);
     }
   }
-
-  return endIndex;
 }
