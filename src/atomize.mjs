@@ -59,6 +59,7 @@ export function atomizer(/** Builders */ builders) {
     const refs = new Map();
     const jumps = [];
 
+    let atomIndex = 0;
     let activeIndex = 0;
     let activeVal = RAW;
 
@@ -80,7 +81,7 @@ export function atomizer(/** Builders */ builders) {
           activeVal = RAW;
         }
       } else if (val === PUSH_JUMP) {
-        jumps.push(output.push(-1) - 1);
+        jumps.push(output.push(0) - 1);
       } else if (val === POP_JUMP) {
         output[jumps.pop()] = output.length;
       } else {
@@ -98,6 +99,7 @@ export function atomizer(/** Builders */ builders) {
             throw new Error(`Infinite loop when encoding ${val}`);
           }
 
+          atomIndex++;
           output.push(known >= 0 ? known : -known);
         } else {
           atomizeValue(val);
@@ -140,7 +142,7 @@ export function atomizer(/** Builders */ builders) {
       const prevIndex = activeIndex;
       const prevLength = output.length;
       activeVal = val;
-      activeIndex = prevLength;
+      activeIndex = atomIndex++;
 
       // write the value and save the reference to it
       // if the function returns true
@@ -298,9 +300,9 @@ export function rebuilder(custom) {
     const cache = [];
     const result = nextValue(cache, custom, readNext);
 
-    // if (nextIndex !== length) {
-    //   throw new Error("rebuilder given excess content");
-    // }
+    if (nextIndex !== length) {
+      throw new Error("rebuilder given excess content");
+    }
 
     return result;
   }
@@ -335,28 +337,60 @@ function rebuildValue(cache, custom, readNext, outerUntil) {
       return readNext();
     case EncodeType.Float64:
       return readNext();
-    case EncodeType.Array:
-      return []; // todo
+    case EncodeType.Array: {
+      // write the value to the cache immediately for self-referencing
+      const array = [];
+      const start = cache.push(array);
+
+      // read the values into the cache
+      const end = rebuildUntil(cache, custom, readNext, readNext());
+
+      // push them onto the array
+      for (let i = start; i < end; i++) {
+        array.push(cache[i]);
+      }
+
+      return RAW;
+    }
     case EncodeType.String:
       return readNext();
-    case EncodeType.Map:
-      return new Map(); // todo
-    case EncodeType.Set:
-      return new Set(); // todo
+    case EncodeType.Map: {
+      // write the value to the cache immediately for self-referencing
+      const map = new Map();
+      const start = cache.push(map);
+
+      // read the keys
+      const end = rebuildUntil(cache, custom, readNext, readNext());
+
+      // populate the map
+      for (let i = start; i < end; i++) {
+        map.set(cache[i], nextValue(cache, custom, readNext));
+      }
+
+      return RAW;
+    }
+    case EncodeType.Set: {
+      // write the value to the cache immediately for self-referencing
+      const set = new Set();
+      const start = cache.push(set);
+
+      // read the values into the cache
+      const end = rebuildUntil(cache, custom, readNext, readNext());
+
+      // add them to the set
+      for (let i = start; i < end; i++) {
+        set.add(cache[i]);
+      }
+
+      return RAW;
+    }
     case EncodeType.Object: {
-      // actually make the object
+      // write the value to the cache immediately for self-referencing
       const object = {};
+      const start = cache.push(object);
 
-      // write it to the cache immediately to allow self-references
-      cache.push(object);
-
-      // find out how far the keys go
-      const until = readNext();
-
-      // read all the keys
-      const start = cache.length;
-      rebuildUntil(cache, custom, readNext, until);
-      const end = cache.length;
+      // read the keys
+      const end = rebuildUntil(cache, custom, readNext, readNext());
 
       // populate the object
       for (let i = start; i < end; i++) {
@@ -365,8 +399,8 @@ function rebuildValue(cache, custom, readNext, outerUntil) {
 
       return RAW;
     }
-    case EncodeType.Custom:
-      return null; // todo
+    default:
+      throw new Error(`Rebuilder TODO ${type}`);
   }
 }
 
@@ -382,8 +416,18 @@ function nextValue(cache, custom, readNext) {
 }
 
 function rebuildUntil(cache, custom, readNext, until) {
-  let result;
-  while ((result = rebuildValue(cache, custom, readNext, until)) !== POP_JUMP) {
-    if (result !== RAW) cache.push(result);
+  let endIndex = cache.length;
+  let result = RAW;
+
+  while (result !== POP_JUMP) {
+    result = rebuildValue(cache, custom, readNext, until);
+    if (result === RAW) {
+      // include the value we just wrote
+      endIndex++;
+    } else if (result !== POP_JUMP) {
+      endIndex = cache.push(result);
+    }
   }
+
+  return endIndex;
 }
