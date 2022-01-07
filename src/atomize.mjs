@@ -304,13 +304,7 @@ export function rebuilder(custom) {
   return rebuild;
 }
 
-function rebuildValue(cache, custom, readNext, outerUntil) {
-  // this will definitely be a type, at least for now
-  const type = readNext(outerUntil);
-  if (type === POP_JUMP) {
-    return POP_JUMP; // do not write
-  }
-
+function rebuildValue(cache, custom, readNext, type) {
   if (type & 1) {
     // it is a back-reference
     return cache[type >> 1];
@@ -401,7 +395,7 @@ function rebuildValue(cache, custom, readNext, outerUntil) {
 
 function nextValue(cache, custom, readNext) {
   const index = cache.length;
-  const result = rebuildValue(cache, custom, readNext, -1);
+  const result = rebuildValue(cache, custom, readNext, readNext());
   if (result === RAW) {
     return cache[index];
   } else {
@@ -411,14 +405,13 @@ function nextValue(cache, custom, readNext) {
 }
 
 function rebuildUntil(cache, results, custom, readNext, until) {
-  let result = RAW;
-  while (result !== POP_JUMP) {
+  for (let type = readNext(until); type !== POP_JUMP; type = readNext(until)) {
     const index = cache.length;
-    result = rebuildValue(cache, custom, readNext, until);
+    const result = rebuildValue(cache, custom, readNext, type);
     if (result === RAW) {
       // include the value we just wrote
       results.push(cache[index]);
-    } else if (result !== POP_JUMP) {
+    } else {
       cache.push(result);
       results.push(result);
     }
