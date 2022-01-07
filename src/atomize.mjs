@@ -74,7 +74,6 @@ export function atomizer(dictionary, /** Builders */ builders) {
     let atomIndex = refs.size - 1;
     let activeIndex = 0;
     let activeVal = RAW;
-    console.log("start", refs);
 
     const write = (val, secret) => {
       if (secret === RAW) {
@@ -532,7 +531,7 @@ export function serialize(atomized) {
         iolist.push(bytes);
         popJump();
       } else {
-        console.error(`TODO serialize ${String(val)}`);
+        throw new Error(`TODO serialize ${String(val)}`);
       }
       return;
     }
@@ -705,7 +704,6 @@ export function deserializer(custom) {
     const readNext = (until) => {
       const before = nextIndex;
       const result = readNext_(until);
-      // console.log("read", before, nextIndex, until, result);
       if (nextIndex < before) {
         throw "fail";
       }
