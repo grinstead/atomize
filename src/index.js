@@ -4,7 +4,6 @@ import {
   encodeNull,
   encodeNumber,
   encodeVoid,
-  ALLOW_SELF_REFERENCE,
   encodeArray,
   encodeString,
   encodeMap,
@@ -44,7 +43,6 @@ function atomizer(builders = {}) {
   return atomizer_(cleaned);
 }
 
-window["exports"]["ALLOW_SELF_REFERENCE"] = ALLOW_SELF_REFERENCE;
 window["exports"]["encodeVoid"] = encodeVoid;
 window["exports"]["encodeNull"] = encodeNull;
 window["exports"]["encodeBoolean"] = encodeBoolean;

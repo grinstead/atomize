@@ -42,7 +42,7 @@ export const EncodeType = {
 
 const RAW = {};
 export const AS_IS = {};
-export const ALLOW_SELF_REFERENCE = {};
+const ALLOW_SELF_REFERENCE = {};
 const PUSH_JUMP = {};
 const POP_JUMP = {};
 
@@ -388,6 +388,10 @@ function rebuildValue(cache, custom, readNext, outerUntil) {
       }
 
       return RAW;
+    }
+    case EncodeType.Custom: {
+      const readValue = () => nextValue(cache, custom, readNext);
+      return custom(readValue);
     }
     default:
       throw new Error(`Rebuilder TODO ${type}`);
