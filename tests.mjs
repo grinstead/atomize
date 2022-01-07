@@ -19,7 +19,7 @@ y.set(x, new Set([y, "boom"]));
 const a = [];
 a.push(a);
 
-run("hi");
+run(-1);
 
 run([["a", "a2"], "b"]);
 

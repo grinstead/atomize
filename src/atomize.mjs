@@ -35,16 +35,19 @@ const ATOM_BITS = 3;
 const ATOM_BITS_MASK = (1 << ATOM_BITS) - 1;
 
 const SerialType = {
-  Void: 0,
-  Null: 1,
-  True: 2,
-  False: 3,
-  NaN: 4,
-  Int: 5,
-  Float64: 6,
-  Buffer: 7,
-  String: 8,
+  // these two are more like flags
+  ComplexAtom: 1,
+  BackReference: 2,
+
+  // these are straight values
+  Void: 1 << 2,
+  Null: 2 << 2,
+  True: 3 << 2,
+  False: 4 << 2,
+  NaN: 5 << 2,
 };
+
+const SERIAL_BITS = 1 + ATOM_BITS;
 
 const RAW = {};
 export const AS_IS = {};
@@ -437,10 +440,32 @@ function rebuildUntil(cache, results, custom, readNext, until) {
 export function serialize(atomized) {
   let iolist = [];
 
-  let index = 0;
+  let nextIndex = 0;
   let byteLength = 0;
 
   let encoder = null;
+
+  const pushJump = (type) => {
+    const index = iolist.push(0) - 1;
+    return () => {
+      let remaining = byteLength;
+      let bits = (0x7f & (remaining << SERIAL_BITS)) | type;
+      remaining >>>= 7 - SERIAL_BITS;
+      if (!remaining) {
+        byteLength++;
+        iolist[index] = bits;
+      } else {
+        const bytes = [bits | 0x80];
+        while (remaining) {
+          bits = remaining & 0x7f;
+          remaining >>>= 7;
+          bytes.push(remaining ? bits | 0x80 : bits);
+        }
+        byteLength += bytes.length;
+        iolist[index] = new Uint8Array(bytes);
+      }
+    };
+  };
 
   const pushByte = (byte) => {
     byteLength++;
@@ -448,69 +473,68 @@ export function serialize(atomized) {
   };
 
   const serializeNext = () => {
-    const type = atomized[index++];
+    const type = atomized[nextIndex++];
 
-    if (type === AS_IS || type !== (type | 0)) {
-      const val = type === AS_IS ? atomized[index++] : type;
+    if (type === AtomType.AsIs || type !== (type | 0)) {
+      const val = type === AtomType.AsIs ? atomized[nextIndex++] : type;
       if (val !== val) {
         pushByte(SerialType.NaN);
       } else if (val === undefined) {
         pushByte(SerialType.Void);
       } else if (val === null) {
         pushByte(SerialType.Null);
-      } else if (typeof type === "boolean") {
-        pushByte(type ? SerialType.True : SerialType.False);
-      } else if (typeof type === "string") {
+      } else if (typeof val === "boolean") {
+        pushByte(val ? SerialType.True : SerialType.False);
+      } else if (typeof val === "string") {
         if (!encoder) {
           encoder = new TextEncoder();
         }
-        const bytes = encoder.encode(type);
+        const bytes = encoder.encode(val);
         const length = bytes.byteLength;
         serializePosInt(bytes.byteLength, pushByte);
         byteLength += length;
         iolist.push(bytes);
       } else {
-        throw new Error(`TODO serialize ${String(type)}`);
+        console.error(`TODO serialize ${String(val)}`);
       }
       return;
     }
 
     if (type < 0) {
-      serializePosInt((~type << 1) | 1, pushByte);
+      serializePosInt((~type << 2) | SerialType.BackReference, pushByte);
       return;
     }
 
-    serializePosInt(type << 1, pushByte);
+    const atomType = type & ATOM_BITS_MASK;
     const until = type >> ATOM_BITS;
+    const popJump = pushJump((atomType << 1) | SerialType.ComplexAtom);
 
-    switch (type & ATOM_BITS_MASK) {
+    switch (atomType) {
       case AtomType.Array:
-      case AtomType.Set: {
-        while (index < until) {
+      case AtomType.Set:
+      case AtomType.Custom: {
+        while (nextIndex < until) {
           serializeNext();
         }
+        popJump();
         break;
       }
       case AtomType.Object:
       case AtomType.Map: {
         let numKeys = 0;
-        while (index < until) {
+        while (nextIndex < until) {
           numKeys++;
           serializeNext();
         }
+        popJump();
         for (let i = numKeys; i > 0; i--) {
-          serializeNext();
-        }
-        break;
-      }
-      case AtomType.Custom: {
-        while (index < until) {
           serializeNext();
         }
         break;
       }
       default:
         // we have exhausted the list
+        throw new Error(`impossible ${type}`);
         break;
     }
   };
