@@ -438,12 +438,13 @@ export function serialize(atomized) {
   let iolist = [];
 
   let index = 0;
-  const length = atomized.length;
+  let byteLength = 0;
 
   let encoder = null;
 
-  const pushOn = (val) => {
-    iolist.push(val);
+  const pushByte = (byte) => {
+    byteLength++;
+    iolist.push(byte);
   };
 
   const serializeNext = () => {
@@ -452,20 +453,22 @@ export function serialize(atomized) {
     if (type === AS_IS || type !== (type | 0)) {
       const val = type === AS_IS ? atomized[index++] : type;
       if (val !== val) {
-        pushOn(SerialType.NaN);
+        pushByte(SerialType.NaN);
       } else if (val === undefined) {
-        pushOn(SerialType.Void);
+        pushByte(SerialType.Void);
       } else if (val === null) {
-        pushOn(SerialType.Null);
+        pushByte(SerialType.Null);
       } else if (typeof type === "boolean") {
-        pushOn(type ? SerialType.True : SerialType.False);
+        pushByte(type ? SerialType.True : SerialType.False);
       } else if (typeof type === "string") {
         if (!encoder) {
           encoder = new TextEncoder();
         }
         const bytes = encoder.encode(type);
-        serializePosInt(bytes.byteLength, iolist);
-        pushOn(bytes);
+        const length = bytes.byteLength;
+        serializePosInt(bytes.byteLength, pushByte);
+        byteLength += length;
+        iolist.push(bytes);
       } else {
         throw new Error(`TODO serialize ${String(type)}`);
       }
@@ -473,11 +476,11 @@ export function serialize(atomized) {
     }
 
     if (type < 0) {
-      serializePosInt((~type << 1) | 1, iolist);
+      serializePosInt((~type << 1) | 1, pushByte);
       return;
     }
 
-    serializePosInt(type << 1, iolist);
+    serializePosInt(type << 1, pushByte);
     const until = type >> ATOM_BITS;
 
     switch (type & ATOM_BITS_MASK) {
@@ -514,12 +517,7 @@ export function serialize(atomized) {
 
   serializeNext();
 
-  const totalLength = iolist.reduce(
-    (l, val) => l + (typeof val === "number" ? 1 : val.byteLength),
-    0
-  );
-
-  const bytes = new Uint8Array(totalLength);
+  const bytes = new Uint8Array(byteLength);
   let outIndex = 0;
   iolist.forEach((val) => {
     if (typeof val === "number") {
@@ -533,28 +531,28 @@ export function serialize(atomized) {
   return bytes;
 }
 
-function serializeInt(int, iolist) {
-  const twiddled = int >= 0 ? int << 1 : (~int << 1) | 1;
-  if (twiddled >> 30) {
-    // the last two bits have data, so we encode as a float64 instead
-    serializeFloat64(int, iolist);
-  } else {
-    serializePosInt(twiddled << 2, iolist);
-  }
-}
+// function serializeInt(int, iolist) {
+//   const twiddled = int >= 0 ? int << 1 : (~int << 1) | 1;
+//   if (twiddled >> 30) {
+//     // the last two bits have data, so we encode as a float64 instead
+//     serializeFloat64(int, iolist);
+//   } else {
+//     serializePosInt(twiddled << 2, iolist);
+//   }
+// }
 
-function serializeFloat64(num, iolist) {
-  const buffer = new ArrayBuffer(8);
-  const data = new DataView(buffer);
-  data.setFloat64(0, num);
-  iolist.push(buffer);
-}
+// function serializeFloat64(num, iolist) {
+//   const buffer = new ArrayBuffer(8);
+//   const data = new DataView(buffer);
+//   data.setFloat64(0, num);
+//   iolist.push(buffer);
+// }
 
-function serializePosInt(int, iolist) {
+function serializePosInt(int, pushByte) {
   let remaining = int;
   do {
     const bits = remaining & 0x7f;
     remaining >>>= 7;
-    iolist.push(remaining ? bits | 0x80 : bits);
+    pushByte(remaining ? bits | 0x80 : bits);
   } while (remaining);
 }
