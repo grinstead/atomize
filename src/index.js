@@ -12,6 +12,7 @@ import {
   encodeObject,
   AS_IS,
   customEncoder,
+  rebuilder,
 } from "./atomize.mjs";
 
 function unsupported(val, write) {
@@ -55,3 +56,4 @@ window["exports"]["encodeSet"] = encodeSet;
 window["exports"]["encodeObject"] = encodeObject;
 window["exports"]["AS_IS"] = AS_IS;
 window["exports"]["atomizer"] = atomizer;
+window["exports"]["rebuilder"] = rebuilder;

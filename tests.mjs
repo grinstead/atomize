@@ -1,4 +1,5 @@
 import { atomizer } from "./dist/atomize.min.mjs";
+import { rebuilder } from "./src/atomize.mjs";
 
 const x = [1];
 x.push(x);
@@ -8,5 +9,12 @@ y.set(1, "hi");
 y.set("hi", 4);
 y.set(x, new Set([y, "boom"]));
 
-console.log(atomizer()({ a: y, b: 2 }));
+const run = (x, encode, decode) => {
+  const atomized = atomizer(encode)(x);
+  console.log(atomized);
+  console.log(rebuilder(decode)(atomized));
+};
+
+run({ a: y, b: 2 });
+
 console.log(atomizer({ keepUnknownsAsIs: true })(new RegExp("hi")));

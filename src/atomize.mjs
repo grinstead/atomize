@@ -278,4 +278,112 @@ export function customEncoder(encoder, fallback) {
 // Rebuilding
 /////////////////////////////////////////////////////////////////////////////
 
-export function rebuilder(options) {}
+export function rebuilder(custom) {
+  function rebuild(full) {
+    let nextIndex = 0;
+    let length = full.length;
+
+    const readNext = (until) => {
+      if (nextIndex === until) {
+        return POP_JUMP;
+      }
+
+      if (nextIndex === length) {
+        throw new Error("Incomplete data");
+      }
+
+      return full[nextIndex++];
+    };
+
+    const cache = [];
+    const result = nextValue(cache, custom, readNext);
+
+    // if (nextIndex !== length) {
+    //   throw new Error("rebuilder given excess content");
+    // }
+
+    return result;
+  }
+
+  return rebuild;
+}
+
+function rebuildValue(cache, custom, readNext, outerUntil) {
+  // this will definitely be a type, at least for now
+  const type = readNext(outerUntil);
+  if (type === POP_JUMP) {
+    return POP_JUMP; // do not write
+  }
+
+  if (type & 1) {
+    // it is a back-reference
+    return cache[type >> 1];
+  }
+
+  switch (type) {
+    case EncodeType.Void:
+      return undefined;
+    case EncodeType.Null:
+      return null;
+    case EncodeType.True:
+      return true;
+    case EncodeType.False:
+      return false;
+    case EncodeType.NaN:
+      return NaN;
+    case EncodeType.Int:
+      return readNext();
+    case EncodeType.Float64:
+      return readNext();
+    case EncodeType.Array:
+      return []; // todo
+    case EncodeType.String:
+      return readNext();
+    case EncodeType.Map:
+      return new Map(); // todo
+    case EncodeType.Set:
+      return new Set(); // todo
+    case EncodeType.Object: {
+      // actually make the object
+      const object = {};
+
+      // write it to the cache immediately to allow self-references
+      cache.push(object);
+
+      // find out how far the keys go
+      const until = readNext();
+
+      // read all the keys
+      const start = cache.length;
+      rebuildUntil(cache, custom, readNext, until);
+      const end = cache.length;
+
+      // populate the object
+      for (let i = start; i < end; i++) {
+        object[cache[i]] = nextValue(cache, custom, readNext);
+      }
+
+      return RAW;
+    }
+    case EncodeType.Custom:
+      return null; // todo
+  }
+}
+
+function nextValue(cache, custom, readNext) {
+  const index = cache.length;
+  const result = rebuildValue(cache, custom, readNext, -1);
+  if (result === RAW) {
+    return cache[index];
+  } else {
+    cache.push(result);
+    return result;
+  }
+}
+
+function rebuildUntil(cache, custom, readNext, until) {
+  let result;
+  while ((result = rebuildValue(cache, custom, readNext, until)) !== POP_JUMP) {
+    if (result !== RAW) cache.push(result);
+  }
+}
