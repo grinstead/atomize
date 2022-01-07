@@ -4,7 +4,7 @@ const run = (x, encode, decode) => {
   console.log("\n// test");
   const atomized = atomizer(encode)(x);
   console.log(atomized);
-  console.log(serialize(atomized));
+  // console.log(serialize(atomized));
   console.log(rebuilder(decode)(atomized));
 };
 
@@ -19,6 +19,8 @@ y.set(x, new Set([y, "boom"]));
 const a = [];
 a.push(a);
 
+run("hi");
+
 run([["a", "a2"], "b"]);
 
 run(
@@ -29,7 +31,7 @@ run(
     },
   },
   (next) => {
-    return next() ? "hi" : "baloney";
+    return next() === true ? "hi" : "baloney";
   }
 );
 

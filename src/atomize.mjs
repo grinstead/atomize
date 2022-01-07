@@ -40,6 +40,15 @@ const EncodeType = {
   Custom: 11 << 1,
 };
 
+const AtomType = {
+  AsIs: 0 << 1,
+  Array: 1 << 1,
+  Object: 2 << 1,
+  Map: 3 << 1,
+  Set: 4 << 1,
+  Custom: 5 << 1,
+};
+
 const SerialType = {
   Int: 0,
   Float64: 1 | (8 << 2),
@@ -71,7 +80,10 @@ export function atomizer(/** Builders */ builders) {
       if (secret === RAW) {
         output.push(val);
       } else if (secret === AS_IS) {
-        output.push(EncodeType.Raw, val);
+        if (val === (val | 0)) {
+          output.push(AtomType.AsIs);
+        }
+        output.push(val);
       } else if (val === ALLOW_SELF_REFERENCE) {
         if (activeVal !== RAW) {
           if (activeIndex >= 0) {
@@ -174,34 +186,31 @@ export function atomizer(/** Builders */ builders) {
 
 // default builders
 
-export function encodeVoid(write) {
-  write(EncodeType.Void, RAW);
+export function encodeVoid(arg, write) {
+  write(undefined, RAW);
 }
 
-export function encodeNull(write) {
-  write(EncodeType.Null, RAW);
+export function encodeNull(arg, write) {
+  write(null, RAW);
 }
 
 export function encodeBoolean(bool, write) {
-  write(bool ? EncodeType.True : EncodeType.False, RAW);
+  write(bool, RAW);
 }
 
 export function encodeNumber(num, write) {
-  if (num !== num) {
-    write(EncodeType.NaN, RAW);
-    return false;
-  } else if (num === (num | 0)) {
+  if (num === (num | 0)) {
     write(num, AS_IS);
     return true;
   } else {
-    write(num, AS_IS);
-    return true;
+    write(num, RAW);
+    return num === num;
   }
 }
 
 export function encodeArray(array, write) {
   write(ALLOW_SELF_REFERENCE);
-  write(EncodeType.Array, RAW);
+  write(AtomType.Array, RAW);
   write(PUSH_JUMP);
 
   const length = array.length;
@@ -215,13 +224,13 @@ export function encodeArray(array, write) {
 }
 
 export function encodeString(string, write) {
-  write(string, AS_IS);
+  write(string, RAW);
   return true;
 }
 
 export function encodeMap(map, write) {
   write(ALLOW_SELF_REFERENCE);
-  write(EncodeType.Map, RAW);
+  write(AtomType.Map, RAW);
 
   write(PUSH_JUMP);
   map.forEach((val, key) => {
@@ -238,7 +247,7 @@ export function encodeMap(map, write) {
 
 export function encodeSet(set, write) {
   write(ALLOW_SELF_REFERENCE);
-  write(EncodeType.Set, RAW);
+  write(AtomType.Set, RAW);
   write(PUSH_JUMP);
   set.forEach((val) => {
     write(val);
@@ -250,7 +259,7 @@ export function encodeSet(set, write) {
 
 export function encodeObject(object, write) {
   write(ALLOW_SELF_REFERENCE);
-  write(EncodeType.Object, RAW);
+  write(AtomType.Object, RAW);
 
   const keys = Object.keys(object);
   const length = keys.length;
@@ -271,7 +280,7 @@ export function encodeObject(object, write) {
 export function customEncoder(encoder, fallback) {
   return encoder
     ? (val, write) => {
-        write(EncodeType.Custom, RAW);
+        write(AtomType.Custom, RAW);
         write(PUSH_JUMP);
         const shouldCache = encoder(val, write);
         write(POP_JUMP);
@@ -315,25 +324,20 @@ export function rebuilder(custom) {
 }
 
 function rebuildValue(cache, custom, readNext, type) {
+  if (type !== (type | 0)) {
+    // it is a plain js value
+    return type;
+  }
+
   if (type & 1) {
     // it is a back-reference
     return cache[type >> 1];
   }
 
   switch (type) {
-    case EncodeType.Void:
-      return undefined;
-    case EncodeType.Null:
-      return null;
-    case EncodeType.True:
-      return true;
-    case EncodeType.False:
-      return false;
-    case EncodeType.NaN:
-      return NaN;
-    case EncodeType.Raw:
+    case AtomType.AsIs:
       return readNext();
-    case EncodeType.Array: {
+    case AtomType.Array: {
       // write the value to the cache immediately for self-referencing
       const array = [];
       cache.push(array);
@@ -343,7 +347,7 @@ function rebuildValue(cache, custom, readNext, type) {
 
       return RAW;
     }
-    case EncodeType.Object: {
+    case AtomType.Object: {
       // write the value to the cache immediately for self-referencing
       const object = {};
       cache.push(object);
@@ -360,7 +364,7 @@ function rebuildValue(cache, custom, readNext, type) {
 
       return RAW;
     }
-    case EncodeType.Map: {
+    case AtomType.Map: {
       // write the value to the cache immediately for self-referencing
       const map = new Map();
       cache.push(map);
@@ -377,7 +381,7 @@ function rebuildValue(cache, custom, readNext, type) {
 
       return RAW;
     }
-    case EncodeType.Set: {
+    case AtomType.Set: {
       // write the value to the cache immediately for self-referencing
       const set = new Set();
       cache.push(set);
@@ -394,7 +398,7 @@ function rebuildValue(cache, custom, readNext, type) {
 
       return RAW;
     }
-    case EncodeType.Custom: {
+    case AtomType.Custom: {
       readNext(); // pop the jump
       const readValue = () => nextValue(cache, custom, readNext);
       return custom(readValue);
