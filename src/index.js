@@ -7,6 +7,8 @@ import {
   ALLOW_SELF_REFERENCE,
   encodeArray,
   encodeString,
+  encodeMap,
+  encodeSet,
 } from "./atomize.mjs";
 
 function atomizer(builders = {}) {
@@ -15,8 +17,10 @@ function atomizer(builders = {}) {
     null: builders["null"] || encodeNull,
     boolean: builders["boolean"] || encodeBoolean,
     number: builders["number"] || encodeNumber,
-    array: builders["array"] || encodeArray,
+    Array: builders["Array"] || encodeArray,
     string: builders["string"] || encodeString,
+    Map: builders["Map"] || encodeMap,
+    Set: builders["Set"] || encodeSet,
   };
 
   return atomizer_(cleaned);
@@ -29,4 +33,6 @@ window["exports"]["encodeBoolean"] = encodeBoolean;
 window["exports"]["encodeNumber"] = encodeNumber;
 window["exports"]["encodeArray"] = encodeArray;
 window["exports"]["encodeString"] = encodeString;
+window["exports"]["encodeMap"] = encodeMap;
+window["exports"]["encodeSet"] = encodeSet;
 window["exports"]["atomizer"] = atomizer;

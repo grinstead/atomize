@@ -10,8 +10,10 @@ let Writer;
  *  null: function(null,Writer):?boolean,
  *  boolean: function(boolean,Writer):?boolean,
  *  number: function(number,Writer):?boolean,
- *  array: function(Array<*>,Writer):?boolean,
+ *  Array: function(Array<*>,Writer):?boolean,
  *  string: function(string,Writer):?boolean,
+ *  Map: function(Map<*,*>,Writer):?boolean,
+ *  Set: function(Set<*>,Writer):?boolean,
  * }} Builders
  */
 let Builders;
@@ -28,6 +30,9 @@ const EncodeType = {
   Int: 6 << 1,
   Float64: 7 << 1,
   Array: 8 << 1,
+  String: 9 << 1,
+  Map: 10 << 1,
+  Set: 11 << 1,
 };
 
 const RAW = {};
@@ -94,8 +99,12 @@ export function atomizer(/** Builders */ builders) {
         func = builders.number;
       } else if (typeof val === "string") {
         func = builders.string;
+      } else if (val instanceof Map) {
+        func = builders.Map;
+      } else if (val instanceof Set) {
+        func = builders.Set;
       } else if (Array.isArray(val)) {
-        func = builders.array;
+        func = builders.Array;
       } else {
         throw new Error("TODO");
       }
@@ -171,6 +180,29 @@ export function encodeArray(array, write) {
 export function encodeString(string, write) {
   write(EncodeType.String, RAW);
   write(string, RAW);
+  return true;
+}
+
+export function encodeMap(map, write) {
+  write(ALLOW_SELF_REFERENCE);
+  write(EncodeType.Map, RAW);
+  write(map.size, RAW);
+  map.forEach((val, key) => {
+    write(key);
+    write(val);
+  });
+
+  return true;
+}
+
+export function encodeSet(set, write) {
+  write(ALLOW_SELF_REFERENCE);
+  write(EncodeType.Set, RAW);
+  write(set.size, RAW);
+  set.forEach((val) => {
+    write(val);
+  });
+
   return true;
 }
 
