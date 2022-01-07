@@ -2,6 +2,7 @@ import {
   atomizer as atomizer_,
   encodeBoolean,
   encodeNull,
+  encodeNumber,
   encodeVoid,
 } from "./atomize.mjs";
 
@@ -10,6 +11,7 @@ function atomizer(builders = {}) {
     void: builders["void"] || encodeVoid,
     null: builders["null"] || encodeNull,
     boolean: builders["boolean"] || encodeBoolean,
+    number: builders["number"] || encodeNumber,
   };
 
   return atomizer_(cleaned);

@@ -6,28 +6,29 @@ let Writer;
 /**
  * The type for all the builders that are availabe to the atomizer
  * @typedef {{
- *  void: function(Writer),
- *  null: function(Writer),
- *  boolean: function(boolean,Writer),
+ *  void: function(Writer):?boolean,
+ *  null: function(Writer):?boolean,
+ *  boolean: function(boolean,Writer):?boolean,
+ *  number: function(number,Writer):?boolean,
  * }} Builders
  */
 let Builders;
 
+/**
+ * @enum {number}
+ */
 const EncodeType = {
-  Void: -1,
-  Null: -2,
-  True: -3,
-  False: -4,
-  NaN: -5,
-
-  Array: 1,
-  Map: 2,
-  Hash: 3,
-  Set: 4,
-  Custom: 5,
+  Void: 1 << 1,
+  Null: 2 << 1,
+  True: 3 << 1,
+  False: 4 << 1,
+  NaN: 5 << 1,
+  Int: 6 << 1,
+  Float64: 7 << 1,
 };
 
 const RAW = {};
+const ALLOW_SELF_REFERENCE = {};
 
 /////////////////////////////////////////////////////////////////////////////
 // Atomizing
@@ -37,34 +38,72 @@ export function atomizer(/** Builders */ builders) {
   const atomize = (full) => {
     const output = [];
     const refs = new Map();
-    const stack = [];
 
     let activeIndex = 0;
-    let activeVal = full;
+    let activeVal = RAW;
 
     const write = (val, secret) => {
       if (secret === RAW) {
         output.push(val);
-      } else if (val === activeVal) {
-        refs.set(val, activeIndex);
+      } else if (val === ALLOW_SELF_REFERENCE) {
+        if (activeVal !== RAW) {
+          if (activeIndex >= 0) {
+            activeIndex = ~(activeIndex << 1);
+          }
+
+          // allows references (for now)
+          refs.set(activeVal, -activeIndex);
+
+          // prevents this codepath being activated twice
+          activeVal = RAW;
+        }
       } else {
-        atomizeValue(val);
+        if (activeIndex >= 0) {
+          // will be a negative number strictly below -1
+          activeIndex = ~(activeIndex << 1);
+
+          // prevent self-references
+          refs.set(val, -1);
+        }
+
+        const known = refs.get(val);
+        if (known != null) {
+          if (known === -1) {
+            throw new Error(`Infinite loop when encoding ${val}`);
+          }
+
+          output.push(known >= 0 ? known : -known);
+        } else {
+          atomizeValue(val);
+        }
       }
     };
 
     const atomizeValue = (val) => {
+      let func;
+      if (val === undefined) {
+        func = builders.void;
+      } else if (val === null) {
+        func = builders.null;
+      } else if (typeof val === "boolean") {
+        func = builders.boolean;
+      } else if (typeof val === "number") {
+        func = builders.number;
+      } else {
+        throw new Error("TODO");
+      }
+
       const prevVal = activeVal;
       const prevIndex = activeIndex;
-
       activeVal = val;
       activeIndex = output.length;
 
-      if (val === undefined) {
-        builders.void(write);
-      } else if (val === null) {
-        builders.null(write);
-      } else if (typeof val === "boolean") {
-        builders.boolean(val, write);
+      // write the value and save the reference to it
+      // if the function returns true
+      if (func(val, write)) {
+        refs.set(val, activeIndex >= 0 ? (activeIndex << 1) | 1 : -activeIndex);
+      } else if (activeIndex < 0) {
+        refs.delete(val);
       }
 
       activeVal = prevVal;
@@ -91,6 +130,21 @@ export function encodeNull(write) {
 
 export function encodeBoolean(bool, write) {
   write(bool ? EncodeType.True : EncodeType.False, RAW);
+}
+
+export function encodeNumber(num, write) {
+  if (num !== num) {
+    write(EncodeType.NaN, RAW);
+    return false;
+  } else if (num === (num | 0)) {
+    write(EncodeType.Int, RAW);
+    write(num, RAW);
+    return true;
+  } else {
+    write(EncodeType.Float64, RAW);
+    write(num, RAW);
+    return true;
+  }
 }
 
 /////////////////////////////////////////////////////////////////////////////
