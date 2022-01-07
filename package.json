@@ -22,6 +22,7 @@
   ],
   "author": "Joe Grinstead",
   "license": "BSD-2-Clause",
+  "private": false,
   "bugs": {
     "url": "https://github.com/grinstead/atomize/issues"
   },
