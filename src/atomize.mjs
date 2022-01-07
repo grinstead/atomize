@@ -22,24 +22,6 @@ let Writer;
  */
 let Builders;
 
-/**
- * Internal only. Exported so that index.js can use it
- * @enum {number}
- */
-const EncodeType = {
-  Void: 1 << 1,
-  Null: 2 << 1,
-  True: 3 << 1,
-  False: 4 << 1,
-  NaN: 5 << 1,
-  Raw: 6 << 1,
-  Array: 7 << 1,
-  Object: 8 << 1,
-  Map: 9 << 1,
-  Set: 10 << 1,
-  Custom: 11 << 1,
-};
-
 const AtomType = {
   AsIs: 0,
   Array: 1,
@@ -50,12 +32,18 @@ const AtomType = {
 };
 
 const ATOM_BITS = 3;
+const ATOM_BITS_MASK = (1 << ATOM_BITS) - 1;
 
 const SerialType = {
-  Int: 0,
-  Float64: 1 | (8 << 2),
-  Buffer: 2,
-  String: 3,
+  Void: 0,
+  Null: 1,
+  True: 2,
+  False: 3,
+  NaN: 4,
+  Int: 5,
+  Float64: 6,
+  Buffer: 7,
+  String: 8,
 };
 
 const RAW = {};
@@ -344,7 +332,7 @@ function rebuildValue(cache, custom, readNext, type) {
     return cache[~type];
   }
 
-  switch (type & 7) {
+  switch (type & ATOM_BITS_MASK) {
     case AtomType.AsIs:
       return readNext();
     case AtomType.Array: {
@@ -454,24 +442,54 @@ export function serialize(atomized) {
 
   let encoder = null;
 
+  const pushOn = (val) => {
+    iolist.push(val);
+  };
+
   const serializeNext = () => {
     const type = atomized[index++];
-    serializePosInt(type, iolist);
 
-    switch (type) {
-      case EncodeType.Array:
-      case EncodeType.Set: {
-        const until = atomized[index++];
-        serializePosInt(until, iolist);
+    if (type === AS_IS || type !== (type | 0)) {
+      const val = type === AS_IS ? atomized[index++] : type;
+      if (val !== val) {
+        pushOn(SerialType.NaN);
+      } else if (val === undefined) {
+        pushOn(SerialType.Void);
+      } else if (val === null) {
+        pushOn(SerialType.Null);
+      } else if (typeof type === "boolean") {
+        pushOn(type ? SerialType.True : SerialType.False);
+      } else if (typeof type === "string") {
+        if (!encoder) {
+          encoder = new TextEncoder();
+        }
+        const bytes = encoder.encode(type);
+        serializePosInt(bytes.byteLength, iolist);
+        pushOn(bytes);
+      } else {
+        throw new Error(`TODO serialize ${String(type)}`);
+      }
+      return;
+    }
+
+    if (type < 0) {
+      serializePosInt((~type << 1) | 1, iolist);
+      return;
+    }
+
+    serializePosInt(type << 1, iolist);
+    const until = type >> ATOM_BITS;
+
+    switch (type & ATOM_BITS_MASK) {
+      case AtomType.Array:
+      case AtomType.Set: {
         while (index < until) {
           serializeNext();
         }
         break;
       }
-      case EncodeType.Object:
-      case EncodeType.Map: {
-        const until = atomized[index++];
-        serializePosInt(until, iolist);
+      case AtomType.Object:
+      case AtomType.Map: {
         let numKeys = 0;
         while (index < until) {
           numKeys++;
@@ -482,37 +500,12 @@ export function serialize(atomized) {
         }
         break;
       }
-      case EncodeType.Raw: {
-        const next = atomized[index++];
-        if (typeof next === "number") {
-          if ((next === next) | 0) {
-            serializeInt(next, iolist);
-          } else {
-            serializeFloat64(next, iolist);
-          }
-        } else if (typeof next === "string") {
-          if (!encoder) {
-            encoder = new TextEncoder();
-          }
-          const bytes = encoder.encode(next);
-          serializePosInt((bytes.length << 2) | SerialType.String, iolist);
-          iolist.push(bytes);
-        }
-        // todo
-        break;
-      }
-      case EncodeType.Custom: {
-        const until = atomized[index++];
+      case AtomType.Custom: {
         while (index < until) {
           serializeNext();
         }
         break;
       }
-      case EncodeType.Void:
-      case EncodeType.Null:
-      case EncodeType.True:
-      case EncodeType.False:
-      case EncodeType.NaN:
       default:
         // we have exhausted the list
         break;

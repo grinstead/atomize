@@ -4,7 +4,7 @@ const run = (x, encode, decode) => {
   console.log("\n// test");
   const atomized = atomizer(encode)(x);
   console.log(atomized);
-  // console.log(serialize(atomized));
+  console.log(serialize(atomized));
   console.log(rebuilder(decode)(atomized));
 };
 
