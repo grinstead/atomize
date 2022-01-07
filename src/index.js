@@ -9,6 +9,7 @@ import {
   encodeString,
   encodeMap,
   encodeSet,
+  encodeObject,
 } from "./atomize.mjs";
 
 function atomizer(builders = {}) {
@@ -21,6 +22,7 @@ function atomizer(builders = {}) {
     string: builders["string"] || encodeString,
     Map: builders["Map"] || encodeMap,
     Set: builders["Set"] || encodeSet,
+    object: builders["object"] || encodeObject,
   };
 
   return atomizer_(cleaned);
@@ -35,4 +37,5 @@ window["exports"]["encodeArray"] = encodeArray;
 window["exports"]["encodeString"] = encodeString;
 window["exports"]["encodeMap"] = encodeMap;
 window["exports"]["encodeSet"] = encodeSet;
+window["exports"]["encodeObject"] = encodeObject;
 window["exports"]["atomizer"] = atomizer;

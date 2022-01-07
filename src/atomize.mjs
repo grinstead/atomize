@@ -14,6 +14,7 @@ let Writer;
  *  string: function(string,Writer):?boolean,
  *  Map: function(Map<*,*>,Writer):?boolean,
  *  Set: function(Set<*>,Writer):?boolean,
+ *  object: function(!Object,Writer):?boolean,
  * }} Builders
  */
 let Builders;
@@ -33,6 +34,7 @@ const EncodeType = {
   String: 9 << 1,
   Map: 10 << 1,
   Set: 11 << 1,
+  Object: 12 << 1,
 };
 
 const RAW = {};
@@ -106,7 +108,12 @@ export function atomizer(/** Builders */ builders) {
       } else if (Array.isArray(val)) {
         func = builders.Array;
       } else {
-        throw new Error("TODO");
+        const proto = Object.getPrototypeOf(val);
+        if (!proto || proto === Object.prototype) {
+          func = builders.object;
+        } else {
+          throw new Error("TODO");
+        }
       }
 
       const prevVal = activeVal;
@@ -202,6 +209,23 @@ export function encodeSet(set, write) {
   set.forEach((val) => {
     write(val);
   });
+
+  return true;
+}
+
+export function encodeObject(object, write) {
+  write(ALLOW_SELF_REFERENCE);
+  write(EncodeType.Object, RAW);
+
+  const keys = Object.keys(object);
+  const length = keys.length;
+
+  write(length, RAW);
+  for (let i = 0; i < length; i++) {
+    const key = keys[i];
+    write(key);
+    write(object[key]);
+  }
 
   return true;
 }
