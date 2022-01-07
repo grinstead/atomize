@@ -4,6 +4,7 @@ import {
   encodeNull,
   encodeNumber,
   encodeVoid,
+  ALLOW_SELF_REFERENCE,
 } from "./atomize.mjs";
 
 function atomizer(builders = {}) {
@@ -17,9 +18,9 @@ function atomizer(builders = {}) {
   return atomizer_(cleaned);
 }
 
-window["exports"]["atomizer"] = atomizer;
+window["exports"]["ALLOW_SELF_REFERENCE"] = ALLOW_SELF_REFERENCE;
 window["exports"]["encodeVoid"] = encodeVoid;
 window["exports"]["encodeNull"] = encodeNull;
 window["exports"]["encodeBoolean"] = encodeBoolean;
-
-// && sed -i '' 's/\bwindow\\.//g' dist/atomize.min.js
+window["exports"]["encodeNumber"] = encodeNumber;
+window["exports"]["atomizer"] = atomizer;

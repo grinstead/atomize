@@ -28,7 +28,7 @@ const EncodeType = {
 };
 
 const RAW = {};
-const ALLOW_SELF_REFERENCE = {};
+export const ALLOW_SELF_REFERENCE = {};
 
 /////////////////////////////////////////////////////////////////////////////
 // Atomizing
