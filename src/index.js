@@ -44,15 +44,6 @@ function atomizer(builders = {}) {
   return atomizer_(cleaned);
 }
 
-window["exports"]["encodeVoid"] = encodeVoid;
-window["exports"]["encodeNull"] = encodeNull;
-window["exports"]["encodeBoolean"] = encodeBoolean;
-window["exports"]["encodeNumber"] = encodeNumber;
-window["exports"]["encodeArray"] = encodeArray;
-window["exports"]["encodeString"] = encodeString;
-window["exports"]["encodeMap"] = encodeMap;
-window["exports"]["encodeSet"] = encodeSet;
-window["exports"]["encodeObject"] = encodeObject;
 window["exports"]["AS_IS"] = AS_IS;
 window["exports"]["atomizer"] = atomizer;
 window["exports"]["rebuilder"] = rebuilder;
