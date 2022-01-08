@@ -43,8 +43,8 @@ const SerialType = {
 
   // because Uint8Array is the most common, it will have its type
   // and length munged together
-  Uint8Array: (0 << 1) | 1,
-  String: (6 << 1) | 1, // must be above the AtomTypes
+  Uint8Array: (6 << 1) | 1, // must be above the AtomTypes
+  String: (7 << 1) | 1,
 
   // these are straight values
   Void: 1 << 4,
@@ -169,7 +169,7 @@ export function atomizer(dictionary, /** Builders */ builders) {
         val instanceof Uint8ClampedArray ||
         val instanceof DataView
       ) {
-        func = builders.ArrayBufferView;
+        func = builders.bytes;
       } else {
         const proto = Object.getPrototypeOf(val);
         if (!proto || proto === Object.prototype) {
@@ -761,7 +761,7 @@ export function deserializer(custom) {
             return new construct(buffer, byteOffset, byteLength);
           }
           default:
-            throw new Error("bad byte " + byte);
+            throw new Error("Deserialize given bad byte " + byte);
         }
       }
     };

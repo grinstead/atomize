@@ -1,5 +1,10 @@
-import { atomizer, rebuilder, serializeAtoms } from "./dist/atomize.min.mjs";
-import { deserializer } from "./src/atomize.mjs";
+import {
+  AS_IS,
+  deserializer,
+  atomizer,
+  rebuilder,
+  serializeAtoms,
+} from "./dist/atomize.min.mjs";
 
 const run = (x, encode, decode) => {
   console.log("\n// test");
@@ -23,6 +28,15 @@ y.set(x, new Set([y, "boom"]));
 
 const a = [];
 a.push(a);
+
+const fancy = atomizer({
+  bytes: (bytes, write) => {
+    console.log("WRITING", bytes);
+    write(bytes, AS_IS);
+  },
+})([new Uint8Array([1]), new Uint8Array([2, 3])]);
+const back = deserializer((next) => next())(serializeAtoms(fancy));
+console.log("custom bytes", fancy, back);
 
 run(-1);
 

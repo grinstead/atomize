@@ -1,6 +1,6 @@
 {
   "name": "@grinstead/atomize",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Explode arbitrary javascript data to modify or ship it across networks",
   "main": "dist/atomize.min.mjs",
   "scripts": {
