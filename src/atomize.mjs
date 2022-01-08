@@ -18,6 +18,7 @@ let Writer;
  *  function: function(function(...*),Writer):?boolean,
  *  symbol: function(Symbol,Writer):?boolean,
  *  instance: function(!Object,Writer):?boolean,
+ *  bytes: function((ArrayBuffer|Uint8Array|Uint8ClampedArray|Int8Array|DataView),Writer):?boolean,
  * }} Builders
  */
 let Builders;
@@ -40,8 +41,10 @@ const SerialType = {
   BackReference: 2,
   Int: 4,
 
-  // these have to be above the AtomTypes
-  String: (6 << 1) | 1,
+  // because Uint8Array is the most common, it will have its type
+  // and length munged together
+  Uint8Array: (0 << 1) | 1,
+  String: (6 << 1) | 1, // must be above the AtomTypes
 
   // these are straight values
   Void: 1 << 4,
@@ -50,6 +53,12 @@ const SerialType = {
   False: 4 << 4,
   NaN: 5 << 4,
   Float64: 6 << 4,
+
+  // we only support the endian agnostic values
+  ArrayBuffer: 7 << 4,
+  Int8Array: 8 << 4,
+  Uint8ClampedArray: 9 << 4,
+  DataView: 10 << 4,
 };
 
 const INT_BITS = 3;
@@ -153,6 +162,14 @@ export function atomizer(dictionary, /** Builders */ builders) {
         func = builders.Set;
       } else if (Array.isArray(val)) {
         func = builders.Array;
+      } else if (
+        val instanceof ArrayBuffer ||
+        val instanceof Int8Array ||
+        val instanceof Uint8Array ||
+        val instanceof Uint8ClampedArray ||
+        val instanceof DataView
+      ) {
+        func = builders.ArrayBufferView;
       } else {
         const proto = Object.getPrototypeOf(val);
         if (!proto || proto === Object.prototype) {
@@ -282,6 +299,11 @@ export function encodeObject(object, write) {
     write(object[keys[i]]);
   }
 
+  return true;
+}
+
+export function encodeBytes(val, write) {
+  write(val, RAW);
   return true;
 }
 
@@ -443,7 +465,7 @@ function rebuildUntil(cache, results, custom, readNext, until) {
 // Binary Serialization
 /////////////////////////////////////////////////////////////////////////////
 
-export function serialize(atomized) {
+export function serializeAtoms(atomized) {
   let iolist = [];
 
   let nextIndex = 0;
@@ -477,6 +499,14 @@ export function serialize(atomized) {
   const pushByte = (byte) => {
     byteLength++;
     iolist.push(byte);
+  };
+
+  const pushBytes = (type, uint8Array) => {
+    const popJump = pushJump(type);
+    const bytes = uint8Array;
+    byteLength += bytes.byteLength;
+    iolist.push(bytes);
+    popJump();
   };
 
   const serializeNext = () => {
@@ -524,14 +554,26 @@ export function serialize(atomized) {
         if (!encoder) {
           encoder = new TextEncoder();
         }
-
-        const popJump = pushJump(SerialType.String);
-        const bytes = encoder.encode(val);
-        byteLength += bytes.byteLength;
-        iolist.push(bytes);
-        popJump();
+        pushBytes(SerialType.String, encoder.encode(val));
+      } else if (val instanceof Uint8Array) {
+        pushBytes(SerialType.Uint8Array, val);
+      } else if (val instanceof ArrayBuffer) {
+        pushByte(SerialType.ArrayBuffer);
+        pushBytes(SerialType.Uint8Array, new Uint8Array(val));
+      } else if (val instanceof Int8Array) {
+        pushByte(SerialType.Int8Array);
+        pushBytes(SerialType.Uint8Array, val);
+      } else if (val instanceof Uint8ClampedArray) {
+        pushByte(SerialType.Uint8ClampedArray);
+        pushBytes(SerialType.Uint8Array, val);
+      } else if (val instanceof DataView) {
+        pushByte(SerialType.DataView);
+        pushBytes(
+          SerialType.Uint8Array,
+          new Uint8Array(val.buffer, val.byteOffset, val.byteLength)
+        );
       } else {
-        throw new Error(`TODO serialize ${String(val)}`);
+        throw new Error(`Cannot serialize ${String(val)}`);
       }
       return;
     }
@@ -626,7 +668,7 @@ export function deserializer(custom) {
       return int;
     };
 
-    const readNext_ = (until) => {
+    const readNext = (/** *= */ until) => {
       if (trickInt != null) {
         const val = trickInt;
         trickInt = null;
@@ -645,6 +687,13 @@ export function deserializer(custom) {
       if (byte & SerialType.ComplexAtom) {
         // the other serialized types were kind of jammed in
         switch (byte & ((1 << SERIAL_BITS) - 1)) {
+          case SerialType.Uint8Array: {
+            const length = readVarInt(byte, SERIAL_BITS);
+            const endIndex = nextIndex + length;
+            const bytes = full.subarray(nextIndex, endIndex);
+            nextIndex = endIndex;
+            return bytes;
+          }
           case SerialType.String: {
             const length = readVarInt(byte, SERIAL_BITS);
             const endIndex = nextIndex + length;
@@ -695,19 +744,26 @@ export function deserializer(custom) {
             nextIndex += 8;
             return float;
           }
+          case SerialType.ArrayBuffer: {
+            const { buffer, byteOffset, byteLength } = readNext();
+            return buffer.slice(byteOffset, byteOffset + byteLength);
+          }
+          case SerialType.Int8Array:
+          case SerialType.Uint8ClampedArray:
+          case SerialType.DataView: {
+            const { buffer, byteOffset, byteLength } = readNext();
+            const construct =
+              byte === SerialType.Int8Array
+                ? Int8Array
+                : byte === SerialType.DataView
+                ? DataView
+                : Uint8ClampedArray;
+            return new construct(buffer, byteOffset, byteLength);
+          }
           default:
             throw new Error("bad byte " + byte);
         }
       }
-    };
-
-    const readNext = (until) => {
-      const before = nextIndex;
-      const result = readNext_(until);
-      if (nextIndex < before) {
-        throw "fail";
-      }
-      return result;
     };
 
     const cache = [];

@@ -1,4 +1,4 @@
-import { atomizer, rebuilder, serialize } from "./dist/atomize.min.mjs";
+import { atomizer, rebuilder, serializeAtoms } from "./dist/atomize.min.mjs";
 import { deserializer } from "./src/atomize.mjs";
 
 const run = (x, encode, decode) => {
@@ -6,8 +6,8 @@ const run = (x, encode, decode) => {
   const atomized = atomizer(encode)(x);
   console.log(atomized);
 
-  const serialized = serialize(atomized);
-  console.log(serialize(atomized));
+  const serialized = serializeAtoms(atomized);
+  console.log(serializeAtoms(atomized));
 
   console.log(deserializer(decode)(serialized));
   // console.log(rebuilder(decode)(atomized));
@@ -25,6 +25,9 @@ const a = [];
 a.push(a);
 
 run(-1);
+
+// run(new DataView(new Uint8Array([1, 2, 3]).buffer));
+run(new DataView(new Uint8Array([1, 2, 3]).buffer));
 
 run([["a", "a2"], "b"]);
 

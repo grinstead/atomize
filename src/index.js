@@ -12,8 +12,9 @@ import {
   AS_IS,
   customEncoder,
   rebuilder,
-  serialize,
+  serializeAtoms,
   deserializer,
+  encodeBytes,
 } from "./atomize.mjs";
 
 function unsupported(val, write) {
@@ -40,6 +41,7 @@ function atomizer(builders = {}) {
     function: customEncoder(builders["function"], unknown),
     symbol: customEncoder(builders["symbol"], unknown),
     instance: customEncoder(builders["instance"], unknown),
+    bytes: customEncoder(builders["bytes"], encodeBytes),
   };
 
   const dictionary = [];
@@ -53,5 +55,9 @@ function atomizer(builders = {}) {
 window["exports"]["AS_IS"] = AS_IS;
 window["exports"]["atomizer"] = atomizer;
 window["exports"]["rebuilder"] = rebuilder;
-window["exports"]["serialize"] = serialize;
+window["exports"]["serializeAtoms"] = serializeAtoms;
+window["exports"]["serializer"] = (options) => {
+  const atomize = atomizer(options);
+  return (val) => serializeAtoms(atomize(val));
+};
 window["exports"]["deserializer"] = deserializer;
