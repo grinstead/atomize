@@ -428,8 +428,10 @@ function rebuildValue(cache, custom, readNext, type) {
       return RAW;
     }
     case AtomType.Custom: {
+      const index = cache.push(null) - 1;
       const readValue = () => nextValue(cache, custom, readNext);
-      return custom(readValue);
+      cache[index] = custom(readValue);
+      return RAW;
     }
     default:
       throw new Error(`Rebuilder TODO ${type}`);

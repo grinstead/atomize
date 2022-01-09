@@ -6,7 +6,7 @@
   "scripts": {
     "build": "yarn closure && yarn hacky-exports",
     "hacky-exports": "sed -i '' 's/window\\.exports\\./export const /g' dist/atomize.min.mjs",
-    "closure": "yarn google-closure-compiler --js_output_file=dist/atomize.min.mjs --js='src/**.mjs' --js='src/**.js' --language_out=ECMASCRIPT5_STRICT --assume_function_wrapper --entry_point=src/index.js --dependency_mode=PRUNE --inject_libraries=false --compilation_level=ADVANCED",
+    "closure": "yarn google-closure-compiler --js_output_file=dist/atomize.min.mjs --entry_point=src/index.mjs --js='src/**.mjs' --js='src/**.js' --language_out=ECMASCRIPT5_STRICT --assume_function_wrapper --dependency_mode=PRUNE --inject_libraries=false --compilation_level=ADVANCED",
     "test": "node tests.mjs"
   },
   "repository": {
