@@ -6,19 +6,19 @@ let Writer;
 /**
  * The type for all the builders that are availabe to the atomizer
  * @typedef {{
- *  void: function(void,Writer):?boolean,
- *  null: function(null,Writer):?boolean,
- *  boolean: function(boolean,Writer):?boolean,
- *  number: function(number,Writer):?boolean,
- *  Array: function(Array<*>,Writer):?boolean,
- *  string: function(string,Writer):?boolean,
- *  Map: function(Map<*,*>,Writer):?boolean,
- *  Set: function(Set<*>,Writer):?boolean,
- *  object: function(!Object,Writer):?boolean,
- *  function: function(function(...*),Writer):?boolean,
- *  symbol: function(Symbol,Writer):?boolean,
- *  instance: function(!Object,Writer):?boolean,
- *  bytes: function((ArrayBuffer|Uint8Array|Uint8ClampedArray|Int8Array|DataView),Writer):?boolean,
+ *  void: function(void,Writer):*,
+ *  null: function(null,Writer):*,
+ *  boolean: function(boolean,Writer):*,
+ *  number: function(number,Writer):*,
+ *  Array: function(Array<*>,Writer):*,
+ *  string: function(string,Writer):*,
+ *  Map: function(Map<*,*>,Writer):*,
+ *  Set: function(Set<*>,Writer):*,
+ *  object: function(!Object,Writer):*,
+ *  function: function(function(...*),Writer):*,
+ *  symbol: function(Symbol,Writer):*,
+ *  instance: function(!Object,Writer):*,
+ *  bytes: function((ArrayBuffer|Uint8Array|Uint8ClampedArray|Int8Array|DataView),Writer):*,
  * }} Builders
  */
 let Builders;
@@ -186,11 +186,9 @@ export function atomizer(dictionary, /** Builders */ builders) {
       activeIndex = atomIndex;
 
       // write the value and save the reference to it
-      // if the function returns true
-      if (func(val, write)) {
-        if (activeIndex >= 0) {
-          refs.set(val, ~activeIndex);
-        }
+      // if the function does not explicitly prevent that
+      if (func(val, write) !== AS_IS) {
+        refs.set(val, activeIndex >= 0 ? ~activeIndex : activeIndex);
       } else if (activeIndex < 0) {
         refs.delete(val);
       }
@@ -215,23 +213,28 @@ export function atomizer(dictionary, /** Builders */ builders) {
 
 export function encodeVoid(arg, write) {
   write(undefined, RAW);
+  return AS_IS;
 }
 
 export function encodeNull(arg, write) {
   write(null, RAW);
+  return AS_IS;
 }
 
 export function encodeBoolean(bool, write) {
   write(bool, RAW);
+  return AS_IS;
 }
 
 export function encodeNumber(num, write) {
   if (num === (num | 0)) {
     write(num, AS_IS);
-    return true;
+    // there is no need to cache small ints
+    return ~128 <= num && num < 128 && AS_IS;
   } else {
     write(num, RAW);
-    return num === num;
+    // do not cache NaN
+    return num !== num && AS_IS;
   }
 }
 
@@ -245,13 +248,10 @@ export function encodeArray(array, write) {
   }
 
   write(array, POP_JUMP);
-
-  return true;
 }
 
 export function encodeString(string, write) {
   write(string, RAW);
-  return true;
 }
 
 export function encodeMap(map, write) {
@@ -268,8 +268,6 @@ export function encodeMap(map, write) {
   map.forEach((val) => {
     write(val);
   });
-
-  return true;
 }
 
 export function encodeSet(set, write) {
@@ -279,8 +277,6 @@ export function encodeSet(set, write) {
     write(val);
   });
   write(set, POP_JUMP);
-
-  return true;
 }
 
 export function encodeObject(object, write) {
@@ -298,13 +294,10 @@ export function encodeObject(object, write) {
   for (let i = 0; i < length; i++) {
     write(object[keys[i]]);
   }
-
-  return true;
 }
 
 export function encodeBytes(val, write) {
   write(val, RAW);
-  return true;
 }
 
 export function customEncoder(encoder, fallback) {

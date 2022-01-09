@@ -45,6 +45,7 @@ run(
       write("a");
       write("b");
       write("c");
+      return AS_IS;
     },
   },
   (next) => {

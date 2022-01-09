@@ -23,7 +23,6 @@ function unsupported(val, write) {
 
 function encodeAsIs(val, write) {
   write(val, AS_IS);
-  return true;
 }
 
 function atomizer(builders = {}) {
